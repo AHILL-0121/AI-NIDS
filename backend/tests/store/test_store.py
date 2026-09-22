@@ -222,3 +222,33 @@ def test_cli_replay_and_db_commands(tmp_path: Path, isolated_database: str) -> N
     assert backup.exit_code == 0
     with sqlite3.connect(tmp_path / "backup.db") as copy:
         assert copy.execute("select count(*) from alerts").fetchone() == (1,)
+
+
+def test_pipeline_keeps_a_bounded_number_of_alerts_in_memory(db: Database) -> None:
+    from nids.core.schemas.alert import Alert, AlertSource, Severity
+
+    pipeline = Pipeline(DetectionEngine(), max_alerts_kept=3)
+    for i in range(10):
+        pipeline.on_alert(
+            Alert(
+                id=f"A-{i}",
+                created_at=1000.0 + i,
+                last_seen=1000.0 + i,
+                type="port_scan",
+                title="Port scan",
+                source=AlertSource.HEURISTIC,
+                severity=Severity.MEDIUM,
+                confidence=0.8,
+                src=f"10.0.0.{i}",
+                dst="10.0.0.1",
+                ports=[],
+                protocol=6,
+                mitre_technique=None,
+                explanation="",
+                recommendation="",
+                evidence={},
+            ),
+            True,
+        )
+
+    assert list(pipeline.alerts) == ["A-7", "A-8", "A-9"] and pipeline.alerts_raised == 10

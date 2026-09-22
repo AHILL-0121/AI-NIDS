@@ -104,7 +104,14 @@ class Supervisor:
                 if upload is None:
                     raise ApiError(404, f"Upload {params['upload_id']} not found.")
                 path = self.data_dir / "uploads" / f"{upload.id}.{upload.format}"
-            return ["replay", str(path), *self._model_args(params.get("model_version"))]
+                name = upload.filename
+            # "--label=" keeps a file name that starts with "-" from being read as an option.
+            return [
+                "replay",
+                str(path),
+                f"--label={name}",
+                *self._model_args(params.get("model_version")),
+            ]
         if kind == "train":
             args = [
                 "train",

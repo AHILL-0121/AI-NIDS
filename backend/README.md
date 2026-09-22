@@ -24,10 +24,31 @@ uv run nids sensor -i "<interface>" --alerts alerts.jsonl [--model artifacts/<ve
 uv run nids api              # API on http://127.0.0.1:8000 (GET /healthz, /api/sensor/*)
 uv run nids data prepare cicids2017 --src data/raw/cicids2017   # see data/README.md
 uv run nids train --dataset cicids2017 --protocol day            # writes artifacts/<version>/
+uv run nids report <session> -o report   # report.html (+ report.pdf with Edge/Chrome/Chromium)
 uv run pytest                # tests
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 ```
+
+## Tests and coverage
+
+```bash
+uv run pytest --cov=nids --cov-report=term       # fails under 75 % overall
+uv run coverage report --include="src/nids/core/*" --fail-under=85
+uv run coverage report --include="src/nids/sensor/*" --fail-under=85
+```
+
+- `tests/fixtures/pcaps/`: labelled captures (benign browsing, nmap SYN scan, hping3 SYN flood,
+  masscan-style sweep) replayed through `nids replay`, each with the exact alerts it must raise.
+  They are synthetic and rebuilt byte for byte by `uv run python -m
+  tests.fixtures.pcaps.make_fixtures`; a test fails if the committed files drift from the script.
+- `tests/api/test_security.py` walks every route in the OpenAPI schema: no session gives 401,
+  a write without the CSRF token gives 403. A new route without `require_user` fails there.
+- `tests/ml/test_regression.py` trains on a frozen synthetic slice and fails if macro-F1 or
+  alert precision/recall drop more than 0.03 below `regression_baseline.json`. After a deliberate
+  change, run it with `NIDS_UPDATE_BASELINE=1` and commit the new baseline with the reason.
+- `tests/soak/`: a long replay loop that checks memory stays flat. Skipped unless
+  `NIDS_SOAK_SECONDS` is set (e.g. 21600 for the 6 h run).
 
 ## Layout
 
@@ -40,6 +61,8 @@ src/nids/
   ml/       datasets/, prepare, splits, train, evaluate, bundle, registry, model_card (Phase 2)
   api/      FastAPI app, routes, auth, WebSocket   (Phase 5)
   store/    database models, migrations            (Phase 4)
+  reports/  session report (HTML template, PDF via a headless browser)   (Phase 8)
+  notify/   email / webhook notifications, daily digest                  (Phase 8)
   cli.py    `nids` entry point
 tests/
 ```

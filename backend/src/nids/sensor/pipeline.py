@@ -8,7 +8,7 @@ alert statuses set through the API), since the API and the sensor are separate p
 
 import logging
 import time
-from collections import Counter
+from collections import Counter, OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -58,8 +58,13 @@ class Pipeline:
     extra_flow_sinks: list[Callable[[FlowRecord], None]] = field(default_factory=list)
     alert_listeners: list[Callable[[Alert, bool], None]] = field(default_factory=list)
 
+    # Recent alerts kept in memory (for `--alerts` output); older ones live in the database only,
+    # so a sensor running for weeks doesn't grow without bound (audit CAP-05).
+    max_alerts_kept: int = 10_000
+
     def __post_init__(self) -> None:
-        self.alerts: dict[str, Alert] = {}
+        self.alerts: OrderedDict[str, Alert] = OrderedDict()
+        self.alerts_raised = 0
         self._seconds: dict[int, _Second] = {}
         self._packet_level = False
         self._last_sync = 0.0
@@ -79,7 +84,11 @@ class Pipeline:
 
     def on_alert(self, alert: Alert, is_new: bool) -> None:
         self.alerts[alert.id] = alert
+        self.alerts.move_to_end(alert.id)
+        if len(self.alerts) > self.max_alerts_kept:
+            self.alerts.popitem(last=False)
         if is_new:
+            self.alerts_raised += 1
             self._second(alert.last_seen).alerts += 1
         if self.flow_writer is not None:
             self.flow_writer.keep(alert.flow_ids)

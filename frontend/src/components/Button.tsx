@@ -120,7 +120,8 @@ export function TextLink({ className, ...props }: ComponentProps<typeof NextLink
     <NextLink
       {...props}
       className={cx(
-        "text-accent underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-accent",
+        // Underlined, not colour alone: links inside sentences must stand out (WCAG 1.4.1).
+        "text-accent underline decoration-1 underline-offset-2 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-accent",
         className,
       )}
     />

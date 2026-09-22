@@ -294,6 +294,8 @@ def test_replay_job_runs_in_a_subprocess_and_stores_results(
         "/api/alerts", params={"session_id": current["result"]["session_id"]}
     ).json()
     assert alerts["total"] == 1 and alerts["items"][0]["type"] == "port_scan"
+    session = client.get(f"/api/sessions/{current['result']['session_id']}").json()
+    assert session["source"] == "scan.pcap"  # the uploaded name, not the stored file's id
     log = client.get("/api/logs", params={"source": f"job:{job['id']}"}).json()["lines"]
     assert any("Port scan" in line for line in log)
 

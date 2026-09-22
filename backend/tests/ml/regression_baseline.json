@@ -1,0 +1,6 @@
+{
+  "macro_f1_known_families": 0.7566,
+  "alert_precision": 0.9744,
+  "alert_recall": 1.0,
+  "alert_pr_auc": 0.9744
+}

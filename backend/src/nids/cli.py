@@ -211,7 +211,7 @@ def _run(
         )
     summary = {
         "session": pipeline.session_id,
-        "alerts": len(pipeline.alerts),
+        "alerts": pipeline.alerts_raised,
         "detections_by_type": dict(engine.detections),
         "suppressed": dict(engine.correlator.suppressed),
         "stored": dict(pipeline.written)
@@ -245,6 +245,9 @@ def replay(
     backend: Annotated[str, typer.Option(help="scapy (any OS) or nfstream (Linux).")] = "scapy",
     idle_timeout: IdleOpt = 120.0,
     active_timeout: ActiveOpt = 120.0,
+    label: Annotated[
+        str | None, typer.Option(help="Name shown for the session (default: the file name).")
+    ] = None,
 ) -> None:
     """Stream a PCAP file through flow assembly, detection and storage."""
     from nids.sensor.flows import FlowTableConfig
@@ -264,7 +267,13 @@ def replay(
         )
 
     _run(
-        factory, kind="replay", label=pcap.name, out=out, alerts_out=alerts, model=model, use_db=db
+        factory,
+        kind="replay",
+        label=(label or pcap.name)[:256],
+        out=out,
+        alerts_out=alerts,
+        model=model,
+        use_db=db,
     )
 
 
