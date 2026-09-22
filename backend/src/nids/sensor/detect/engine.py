@@ -33,7 +33,9 @@ class DetectionConfig:
 class DetectionEngine:
     """Implements PacketObserver. Not thread-safe: call it from the capture thread."""
 
-    def __init__(self, on_alert: AlertSink, config: DetectionConfig | None = None) -> None:
+    def __init__(
+        self, on_alert: AlertSink | None = None, config: DetectionConfig | None = None
+    ) -> None:
         self.config = config or DetectionConfig()
         self.correlator = AlertCorrelator(on_alert, self.config.dedup_window_s)
         self.scan = ScanDetector(self._detect, self.config.scan)

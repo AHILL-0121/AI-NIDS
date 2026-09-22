@@ -26,9 +26,9 @@ def render_model_card(manifest: dict[str, Any], report: dict[str, Any]) -> str:
         f"- **Split:** {training['split']}",
         f"- **Feature set:** {training['feature_set']} ({len(training['features'])} features, "
         f"schema `{manifest['schema_version']}` / `{manifest['schema_hash']}`)",
-        f"- **Rows:** fit {rows['fit']:,} · validation {rows['validation']:,} · "
+        f"- **Rows:** fit {rows['fit']:,}, validation {rows['validation']:,}, "
         f"test {rows['test']:,}",
-        f"- **Created:** {manifest['created_at']} · libraries {manifest['libraries']}",
+        f"- **Created:** {manifest['created_at']}, libraries {manifest['libraries']}",
         "",
         "## Intended use",
         "",

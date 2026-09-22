@@ -16,10 +16,11 @@ from nids.core.logging import configure_logging
 from nids.core.settings import get_settings
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from nids.core.schemas.alert import Alert
-    from nids.core.schemas.flow import FlowRecord
     from nids.sensor.capture import FlowSource
-    from nids.sensor.detect import DetectionEngine
+    from nids.sensor.detect.base import PacketObserver
 
 app = typer.Typer(help="AI-NIDS v2 command line.", no_args_is_help=True)
 
@@ -99,45 +100,59 @@ def _open_out(path: str) -> "nullcontext[IO[str] | None] | IO[str]":
     return open(path, "w", encoding="utf-8")
 
 
-def _build_engine(model: Path | None) -> "tuple[DetectionEngine, dict[str, Alert]]":
-    """Detection engine that prints each new alert to stderr and keeps the latest state of all."""
-    from nids.sensor.detect import DetectionEngine
-
-    alerts: dict[str, Alert] = {}
-
-    def on_alert(alert: "Alert", is_new: bool) -> None:
-        alerts[alert.id] = alert
-        if is_new:
-            where = f"{alert.src or '*'} -> {alert.dst or '*'}"
-            typer.echo(f"[{alert.severity.value.upper():8}] {alert.title}: {where}", err=True)
-
-    engine = DetectionEngine(on_alert)
-    if model is not None:
-        engine.load_model(model)
-    return engine, alerts
+def _alert_printer(alert: "Alert", is_new: bool) -> None:
+    if is_new:
+        where = f"{alert.src or '*'} -> {alert.dst or '*'}"
+        typer.echo(f"[{alert.severity.value.upper():8}] {alert.title}: {where}", err=True)
 
 
 def _run(
-    source: "FlowSource",
+    source_factory: "Callable[[PacketObserver], FlowSource]",
+    *,
+    kind: str,
+    label: str,
     out: str,
-    engine: "DetectionEngine",
-    alerts: "dict[str, Alert]",
     alerts_out: Path | None,
+    model: Path | None,
+    use_db: bool,
 ) -> None:
-    """Run a flow source to completion (or Ctrl+C), then print a summary to stderr."""
+    """Run capture + detection (+ storage) until the input ends or Ctrl+C, then summarise."""
     from nids.sensor.capture import CaptureError
+    from nids.sensor.detect import DetectionEngine
+    from nids.sensor.pipeline import Pipeline
     from nids.sensor.runner import JsonlSink, run_in_background
+    from nids.store import repo
+    from nids.store.db import Database
+
+    settings = get_settings()
+    engine = DetectionEngine()
+    if model is not None:
+        engine.load_model(model)
+    db = Database(settings.database_url) if use_db else None
 
     started = time.monotonic()
+    error: str | None = None
     with _open_out(out) as stream:
-        jsonl = JsonlSink(stream) if stream is not None else None
+        pipeline = Pipeline(engine, db=db, flow_sample_rate=settings.flow_sample_rate)
+        source = source_factory(pipeline)
+        if db is not None:
+            pipeline.session_id = repo.start_session(
+                db, kind, label, source.name, engine.ml.model_version if engine.ml else None
+            )
+            pipeline.pseudonymizer = (
+                repo.Pseudonymizer.from_db(db) if settings.pseudonymize_ips else None
+            )
+            pipeline.flow_writer = repo.FlowWriter(
+                db,
+                pipeline.session_id,
+                settings.flow_sample_rate,
+                pseudonymizer=pipeline.pseudonymizer,
+            )
+        if stream is not None:
+            pipeline.extra_flow_sinks.append(JsonlSink(stream))
+        pipeline.alert_listeners.append(_alert_printer)
 
-        def sink(flow: "FlowRecord") -> None:
-            if jsonl is not None:
-                jsonl(flow)
-            engine.on_flow(flow)
-
-        thread, stop, errors = run_in_background(source, sink)
+        thread, stop, errors = run_in_background(source, pipeline.on_flow)
         try:
             while thread.is_alive():
                 thread.join(timeout=0.5)
@@ -145,7 +160,11 @@ def _run(
             typer.echo("\nStopping... (flushing open flows)", err=True)
             stop.set()
             thread.join()
+        for exc in errors:
+            error = f"{type(exc).__name__}: {exc}"
 
+    if db is not None and pipeline.session_id is not None:
+        repo.finish_session(db, pipeline.session_id, source.metrics(), error)
     for exc in errors:
         if isinstance(exc, CaptureError):
             typer.echo(f"Error: {exc}", err=True)
@@ -154,56 +173,66 @@ def _run(
     if alerts_out is not None:
         alerts_out.parent.mkdir(parents=True, exist_ok=True)
         alerts_out.write_text(
-            "".join(json.dumps(a.to_dict()) + "\n" for a in alerts.values()), encoding="utf-8"
+            "".join(json.dumps(a.to_dict()) + "\n" for a in pipeline.alerts.values()),
+            encoding="utf-8",
         )
-    elapsed = time.monotonic() - started
     summary = {
-        "flows": source.metrics().get("flows_created"),
-        "alerts": len(alerts),
-        "alerts_by_type": dict(engine.detections),
+        "session": pipeline.session_id,
+        "alerts": len(pipeline.alerts),
+        "detections_by_type": dict(engine.detections),
         "suppressed": dict(engine.correlator.suppressed),
+        "stored": dict(pipeline.written)
+        | ({"flows": pipeline.flow_writer.written} if pipeline.flow_writer else {}),
         "capture": source.metrics(),
     }
-    typer.echo(f"\nDone in {elapsed:.1f} s", err=True)
+    typer.echo(f"\nDone in {time.monotonic() - started:.1f} s", err=True)
     typer.echo(json.dumps(summary, indent=2), err=True)
 
 
 AlertsOpt = Annotated[
-    Path | None, typer.Option("--alerts", help="Write the final alerts as JSON Lines here.")
+    Path | None, typer.Option("--alerts", help="Also write the final alerts as JSON Lines here.")
 ]
 ModelOpt = Annotated[
     Path | None,
     typer.Option(exists=True, file_okay=False, help="Model artifact directory (from nids train)."),
+]
+DbOpt = Annotated[
+    bool, typer.Option("--db/--no-db", help="Store the session, flows and alerts in the database.")
 ]
 
 
 @app.command()
 def replay(
     pcap: Annotated[Path, typer.Argument(exists=True, dir_okay=False, help="pcap or pcapng file.")],
-    out: OutOpt = "-",
+    out: OutOpt = "none",
     alerts: AlertsOpt = None,
     model: ModelOpt = None,
+    db: DbOpt = True,
     speed: Annotated[str, typer.Option(help="max or realtime.")] = "max",
     backend: Annotated[str, typer.Option(help="scapy (any OS) or nfstream (Linux).")] = "scapy",
     idle_timeout: IdleOpt = 120.0,
     active_timeout: ActiveOpt = 120.0,
 ) -> None:
-    """Stream a PCAP file through flow assembly and detection."""
+    """Stream a PCAP file through flow assembly, detection and storage."""
     from nids.sensor.flows import FlowTableConfig
     from nids.sensor.runner import build_replay_source
 
     if speed not in ("max", "realtime") or backend not in ("scapy", "nfstream"):
         raise typer.BadParameter("speed must be max|realtime and backend scapy|nfstream")
-    engine, found = _build_engine(model)
     config = FlowTableConfig(idle_timeout=idle_timeout, active_timeout=active_timeout)
-    source = build_replay_source(
-        pcap,
-        backend=cast(Literal["nfstream", "scapy"], backend),
-        config=config,
-        speed=cast(Literal["max", "realtime"], speed),
-        observer=engine,
+
+    def factory(observer: "PacketObserver") -> "FlowSource":
+        return build_replay_source(
+            pcap,
+            backend=cast(Literal["nfstream", "scapy"], backend),
+            config=config,
+            speed=cast(Literal["max", "realtime"], speed),
+            observer=observer,
+        )
+
+    _run(
+        factory, kind="replay", label=pcap.name, out=out, alerts_out=alerts, model=model, use_db=db
     )
-    _run(source, out, engine, found, alerts)
 
 
 @app.command()
@@ -212,6 +241,7 @@ def sensor(
     out: OutOpt = "none",
     alerts: AlertsOpt = None,
     model: ModelOpt = None,
+    db: DbOpt = True,
     backend: Annotated[str, typer.Option(help="auto, nfstream or scapy.")] = "auto",
     bpf_filter: Annotated[
         str | None, typer.Option("--filter", help="BPF filter, e.g. 'tcp'.")
@@ -219,7 +249,7 @@ def sensor(
     idle_timeout: IdleOpt = 120.0,
     active_timeout: ActiveOpt = 120.0,
 ) -> None:
-    """Capture live traffic and detect attacks (needs capture privileges). Stop with Ctrl+C."""
+    """Capture live traffic, detect attacks and store results. Stop with Ctrl+C."""
     from nids.sensor.capability import check_capture
     from nids.sensor.flows import FlowTableConfig
     from nids.sensor.runner import build_live_source
@@ -232,17 +262,84 @@ def sensor(
         raise typer.Exit(code=1)
     if backend not in ("auto", "nfstream", "scapy"):
         raise typer.BadParameter("backend must be auto|nfstream|scapy")
-    engine, found = _build_engine(model)
     config = FlowTableConfig(idle_timeout=idle_timeout, active_timeout=active_timeout)
-    source = build_live_source(
-        interface,
-        cast(Literal["auto", "nfstream", "scapy"], backend),
-        config,
-        bpf_filter,
-        observer=engine,
+
+    def factory(observer: "PacketObserver") -> "FlowSource":
+        return build_live_source(
+            interface,
+            cast(Literal["auto", "nfstream", "scapy"], backend),
+            config,
+            bpf_filter,
+            observer=observer,
+        )
+
+    typer.echo(f"Capturing on {interface}. Ctrl+C to stop.", err=True)
+    _run(factory, kind="live", label=interface, out=out, alerts_out=alerts, model=model, use_db=db)
+
+
+db_app = typer.Typer(help="Database maintenance.", no_args_is_help=True)
+app.add_typer(db_app, name="db")
+
+
+@db_app.command("upgrade")
+def db_upgrade() -> None:
+    """Create the database or apply pending migrations."""
+    from nids.store.db import upgrade
+
+    url = get_settings().database_url
+    upgrade(url)
+    typer.echo(f"Database is up to date: {url}")
+
+
+@db_app.command("status")
+def db_status() -> None:
+    """Row counts per table."""
+    from sqlalchemy import func, select
+
+    from nids.store import models
+    from nids.store.db import Database
+
+    database = Database(get_settings().database_url)
+    tables = (
+        models.CaptureSession,
+        models.Flow,
+        models.AlertRow,
+        models.Traffic,
+        models.SuppressionRuleRow,
+        models.ModelRow,
+        models.AuditLog,
     )
-    typer.echo(f"Capturing on {interface} with {source.name}. Ctrl+C to stop.", err=True)
-    _run(source, out, engine, found, alerts)
+    with database.session() as s:
+        for table in tables:
+            count = s.scalar(select(func.count()).select_from(table)) or 0
+            typer.echo(f"{table.__tablename__:<18} {count:>12,}")
+
+
+@db_app.command("retention")
+def db_retention() -> None:
+    """Roll up traffic and delete data older than the retention settings."""
+    from nids.store.db import Database
+    from nids.store.retention import RetentionPolicy, purge
+
+    settings = get_settings()
+    counts = purge(Database(settings.database_url), RetentionPolicy.from_settings(settings))
+    typer.echo(json.dumps({"deleted": counts}, indent=2))
+
+
+@db_app.command("backup")
+def db_backup(
+    out: Annotated[Path, typer.Argument(help="Where to write the backup copy (.db).")],
+) -> None:
+    """Consistent copy of a SQLite database while it's in use."""
+    import sqlite3
+
+    url = get_settings().database_url
+    if not url.startswith("sqlite:///"):
+        raise typer.BadParameter("backup supports SQLite only; use your database's own tools")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(url.removeprefix("sqlite:///")) as src, sqlite3.connect(out) as dst:
+        src.backup(dst)
+    typer.echo(f"Backed up to {out}")
 
 
 data_app = typer.Typer(help="Prepare training datasets.", no_args_is_help=True)

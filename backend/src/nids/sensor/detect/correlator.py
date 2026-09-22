@@ -52,9 +52,9 @@ def _in(address: str | None, pattern: str | None) -> bool:
 
 class AlertCorrelator:
     def __init__(
-        self, sink: AlertSink, dedup_window: float = 900.0, max_flow_ids: int = 50
+        self, sink: AlertSink | None = None, dedup_window: float = 900.0, max_flow_ids: int = 50
     ) -> None:
-        self._sink = sink
+        self.sink: AlertSink = sink or (lambda alert, is_new: None)
         self.dedup_window = dedup_window
         self.max_flow_ids = max_flow_ids
         self._open: dict[tuple[str, str | None, str | None], Alert] = {}
@@ -65,6 +65,23 @@ class AlertCorrelator:
     def add_rule(self, rule: SuppressionRule) -> None:
         with self._lock:
             self._rules.append(rule)
+
+    def replace_rules(self, rules: list[SuppressionRule]) -> None:
+        """Swap in the current rule set (e.g. reloaded from the database)."""
+        with self._lock:
+            self._rules = list(rules)
+
+    def open_alert_ids(self) -> list[str]:
+        with self._lock:
+            return [a.id for a in self._open.values()]
+
+    def sync_statuses(self, statuses: dict[str, AlertStatus]) -> None:
+        """Apply analyst decisions made elsewhere. A resolved or false-positive alert stops
+        absorbing repeats, so the next occurrence becomes a new alert (or is suppressed)."""
+        with self._lock:
+            for alert in self._open.values():
+                if alert.id in statuses:
+                    alert.status = statuses[alert.id]
 
     def mark_false_positive(self, alert: Alert, until: float | None = None) -> SuppressionRule:
         """Record the analyst's verdict and stop the same (type, src, dst) from alerting again."""
@@ -101,7 +118,7 @@ class AlertCorrelator:
                 alert = self._create(d)
                 self._open[key] = alert
                 is_new = True
-        self._sink(alert, is_new)
+        self.sink(alert, is_new)
         return alert
 
     def expire(self, now: float) -> None:
