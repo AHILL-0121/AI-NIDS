@@ -33,6 +33,14 @@ log = logging.getLogger(__name__)
 JobKind = Literal["sensor", "replay", "train", "prepare", "report"]
 DATASETS = ("cicids2017", "unsw-nb15")
 _WINDOWS = sys.platform == "win32"
+# A new process group lets the child get the stop signal on its own: CTRL_BREAK on Windows,
+# SIGINT elsewhere. Written as a sys.platform branch so mypy checks each platform's names.
+if sys.platform == "win32":
+    _NEW_PROCESS_GROUP = subprocess.CREATE_NEW_PROCESS_GROUP
+    _STOP_SIGNAL = signal.CTRL_BREAK_EVENT
+else:
+    _NEW_PROCESS_GROUP = 0
+    _STOP_SIGNAL = signal.SIGINT
 _MODEL_SAVED = re.compile(r"Saved model to (\S+)")
 _SESSION = re.compile(r'"session": "([0-9a-f]+)"')
 HEARTBEAT_STALE_S = 45  # the sensor beats every 10 s
@@ -173,7 +181,7 @@ class Supervisor:
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
                     env=env,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if _WINDOWS else 0,
+                    creationflags=_NEW_PROCESS_GROUP,
                     start_new_session=not _WINDOWS,
                 )
             self._procs[job_id] = proc
@@ -198,7 +206,7 @@ class Supervisor:
         if proc is None or proc.poll() is not None:
             raise ApiError(409, "That job isn't running.")
         try:
-            proc.send_signal(signal.CTRL_BREAK_EVENT if _WINDOWS else signal.SIGINT)
+            proc.send_signal(_STOP_SIGNAL)
         except OSError:
             proc.terminate()
         with self.db.session() as s:
