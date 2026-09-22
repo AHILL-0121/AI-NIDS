@@ -8,7 +8,10 @@ Every loader returns the same frame layout ("prepared frame"):
 - `day`: weekday name when known (CIC-IDS2017's attack days), else "";
 - `split`: "train"/"test" when the dataset ships an official split, else "";
 - `timestamp`: flow start time when known (NaT otherwise), used for false positives per hour;
-- `source_file`: the CSV the row came from.
+- `source_file`: the CSV the row came from;
+- `src_ip`, `dst_ip`, `src_port`, `dst_port`: the flow's endpoints when the dataset has them
+  ("" / -1 otherwise). Never used as model features (see features_v1); they're used to measure
+  alerts the way an analyst sees them (repeats between the same hosts merge into one alert).
 """
 
 import re
@@ -33,7 +36,19 @@ FAMILIES = (
     "other",
 )
 
-META_COLUMNS = ("label", "family", "day", "split", "timestamp", "source_file")
+META_COLUMNS = (
+    "label",
+    "family",
+    "day",
+    "split",
+    "timestamp",
+    "source_file",
+    "src_ip",
+    "dst_ip",
+    "src_port",
+    "dst_port",
+)
+_META_DEFAULTS: dict[str, object] = {"src_port": -1, "dst_port": -1}
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 
@@ -73,7 +88,11 @@ def build_frame(base: Mapping[str, pd.Series], meta: pd.DataFrame) -> pd.DataFra
     features = derive(columns, div=_vector_div)
     frame = pd.DataFrame({name: features[name].astype("float32") for name in FEATURE_NAMES})
     for col in META_COLUMNS:
-        frame[col] = meta[col].to_numpy() if col in meta else ""
+        frame[col] = meta[col].to_numpy() if col in meta else _META_DEFAULTS.get(col, "")
+    for col in ("src_port", "dst_port"):
+        frame[col] = pd.to_numeric(frame[col], errors="coerce").fillna(-1).astype("int32")
+    for col in ("src_ip", "dst_ip"):
+        frame[col] = frame[col].fillna("").astype(str)
     stamps = meta["timestamp"] if "timestamp" in meta else pd.Series(pd.NaT, index=index)
     frame["timestamp"] = pd.to_datetime(stamps.to_numpy(), errors="coerce").astype("datetime64[ns]")
     return frame

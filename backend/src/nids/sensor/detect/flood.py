@@ -14,12 +14,16 @@ weighted mean and variance). An alert needs all of:
 TCP floods are measured by SYNs without ACK (half-open connections), not by packet size or count.
 A burst of SYNs spread over many ports is a port scan, not a flood, and is left to the scan
 detector (`max_flood_ports`).
-Many distinct sources turn the alert into a DDoS. Needs packet-level capture (the Scapy backend);
-with NFStream, flood detection is off (only finished flows are visible there).
+Flood packets are counted per source, so the alert names the host actually sending them (not
+whichever client happened to talk to the victim that second), and many distinct *flooding*
+sources, not merely many clients, turn the alert into a DDoS.
+
+Needs packet-level capture (the Scapy backend); with NFStream, flood detection is off (only
+finished flows are visible there).
 """
 
 import math
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from dataclasses import dataclass
 
 from nids.core.schemas.alert import AlertSource, Detection, Severity
@@ -70,7 +74,7 @@ class _Host:
         "ports",
         "pps_base",
         "second",
-        "sources",
+        "senders",
         "syn",
         "syn_base",
     )
@@ -78,7 +82,7 @@ class _Host:
     def __init__(self, second: int) -> None:
         self.second = second
         self.inbound = self.outbound = self.syn = self.other = 0
-        self.sources: set[str] = set()
+        self.senders: Counter[str] = Counter()  # flood-type packets (SYN or UDP/ICMP) per source
         self.ports: set[int] = set()
         self.syn_base = _Ewma()
         self.pps_base = _Ewma()
@@ -87,7 +91,7 @@ class _Host:
     def reset(self, second: int) -> None:
         self.second = second
         self.inbound = self.outbound = self.syn = self.other = 0
-        self.sources = set()
+        self.senders = Counter()
         self.ports = set()
 
 
@@ -101,15 +105,20 @@ class FloodDetector:
         second = int(pkt.ts)
         dst = self._host(pkt.dst_ip, second)
         dst.inbound += 1
+        flood_packet = False
         if pkt.protocol == TCP:
             if pkt.tcp_flags & SYN and not pkt.tcp_flags & ACK:
                 dst.syn += 1
+                flood_packet = True
                 if len(dst.ports) <= self.config.max_flood_ports:
                     dst.ports.add(pkt.dst_port)
         else:
             dst.other += 1
-        if len(dst.sources) < self.config.max_sources_tracked:
-            dst.sources.add(pkt.src_ip)
+            flood_packet = True
+        if flood_packet and (
+            pkt.src_ip in dst.senders or len(dst.senders) < self.config.max_sources_tracked
+        ):
+            dst.senders[pkt.src_ip] += 1
         self._host(pkt.src_ip, second).outbound += 1
 
     def tick(self, now: float) -> None:
@@ -173,8 +182,9 @@ class FloodDetector:
         self, address: str, host: _Host, metric: str, rate: int, base: _Ewma, reply_ratio: float
     ) -> None:
         c = self.config
-        sources = len(host.sources)
+        sources = len(host.senders)
         distributed = sources >= c.ddos_min_sources
+        top_source, top_count = host.senders.most_common(1)[0] if host.senders else (None, 0)
         kind = "ddos" if distributed else ("syn_flood" if metric == "SYNs" else "flood")
         baseline = round(base.mean, 1) if base.n >= c.warmup_s else None
         excess = (
@@ -189,7 +199,7 @@ class FloodDetector:
                 source=AlertSource.HEURISTIC,
                 severity=Severity.CRITICAL if distributed else Severity.HIGH,
                 confidence=min(1.0, 0.5 + 0.1 * excess),
-                src=None if distributed else next(iter(host.sources), None),
+                src=None if distributed else top_source,
                 dst=address,
                 evidence={
                     "metric": metric,
@@ -198,6 +208,7 @@ class FloodDetector:
                     "distinct_sources": sources
                     if sources < c.max_sources_tracked
                     else f">={sources}",
+                    "top_source_share": round(top_count / max(sum(host.senders.values()), 1), 3),
                     "reply_ratio": round(reply_ratio, 3),
                     "second": host.second,
                 },

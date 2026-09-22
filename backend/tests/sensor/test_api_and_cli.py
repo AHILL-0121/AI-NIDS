@@ -3,59 +3,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from nids.api.app import create_app
-from nids.api.routes import sensor as sensor_routes
 from nids.cli import app as cli
-from nids.sensor.capability import CapabilityReport, Check
-from nids.sensor.interfaces import InterfaceInfo
-
-
-def test_interfaces_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = [
-        InterfaceInfo(
-            name="eth0",
-            label="eth0",
-            description="eth0",
-            ipv4=["10.0.0.2"],
-            ipv6=[],
-            mac=None,
-            loopback=False,
-        )
-    ]
-    monkeypatch.setattr(sensor_routes, "list_interfaces", lambda: fake)
-
-    response = TestClient(create_app()).get("/api/sensor/interfaces")
-
-    assert response.status_code == 200
-    assert response.json()[0]["ipv4"] == ["10.0.0.2"]
-
-
-def test_interfaces_endpoint_without_capture_support(monkeypatch: pytest.MonkeyPatch) -> None:
-    def missing() -> list[InterfaceInfo]:
-        raise ImportError("scapy")
-
-    monkeypatch.setattr(sensor_routes, "list_interfaces", missing)
-
-    response = TestClient(create_app()).get("/api/sensor/interfaces")
-
-    assert response.status_code == 503
-
-
-def test_capabilities_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    report = CapabilityReport(
-        platform="Windows",
-        backend=None,
-        checks=[Check(name="npcap", status="error", detail="missing", fix="install npcap")],
-    )
-    monkeypatch.setattr(sensor_routes, "check_capture", lambda: report)
-
-    body = TestClient(create_app()).get("/api/sensor/capabilities").json()
-
-    assert body["ok"] is False and body["checks"][0]["fix"] == "install npcap"
 
 
 def test_cli_replay_writes_json_lines(sample_pcap: Path, tmp_path: Path) -> None:

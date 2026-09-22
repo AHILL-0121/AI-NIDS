@@ -76,4 +76,10 @@ def load_prepared(
             f"{path.name} was prepared with feature schema {meta.get('schema_hash')}, but the code "
             f"now uses {SCHEMA_HASH}. Re-run `nids data prepare {dataset}`."
         )
-    return pd.read_parquet(path), meta
+    frame = pd.read_parquet(path)
+    from nids.ml.datasets.common import META_COLUMNS
+
+    for col in META_COLUMNS:  # files prepared before a metadata column existed
+        if col not in frame:
+            frame[col] = -1 if col.endswith("_port") else ""
+    return frame, meta

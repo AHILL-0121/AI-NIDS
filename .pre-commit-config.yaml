@@ -18,6 +18,8 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=1024]
+        # The labelled test captures are reviewed binaries, rebuilt by make_fixtures.py.
+        exclude: ^backend/tests/fixtures/pcaps/.*\.pcap$
       - id: detect-private-key
 
   - repo: https://github.com/gitleaks/gitleaks

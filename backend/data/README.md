@@ -22,8 +22,12 @@ are gitignored: the datasets are large, and their licences don't allow redistrib
 
 ## UNSW-NB15
 
-- **Where:** https://research.unsw.edu.au/projects/unsw-nb15-dataset. Download the partitioned
-  `UNSW_NB15_training-set.csv` (175,341 rows) and `UNSW_NB15_testing-set.csv` (82,332 rows).
+- **Where:** https://research.unsw.edu.au/projects/unsw-nb15-dataset. The project page links to a
+  public SharePoint folder; the partitioned files are in `CSV Files/Training and Testing Sets/`.
+  Download `UNSW_NB15_training-set.csv` (175,341 rows) and `UNSW_NB15_testing-set.csv`
+  (82,332 rows).
+- **Checksums of the copies used for the reported results:** training set sha256 `bec7dd5e…48fa`,
+  testing set sha256 `734fe664…a559` (full values in `data/processed/unsw-nb15.meta.json`).
 - **Put** them in `data/raw/unsw-nb15/`.
 - **Licence:** free for academic research; commercial use needs the authors' agreement.
 - **Cite:** N. Moustafa, J. Slay. *UNSW-NB15: a comprehensive data set for network intrusion

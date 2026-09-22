@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+<title>AI-NIDS session report · {{ s.source }} · {{ s.started_at | time }}</title>
+{% set marks = {"critical": "◆", "high": "▲", "medium": "●", "low": "▼", "info": "○"} %}
+<style>
+  :root {
+    --bg: #FAFAF7; --surface: #FFFFFF; --sunken: #F2F1EC; --line: #E4E2DC; --line-strong: #8C8F94;
+    --ink: #14161A; --muted: #555A61; --subtle: #62676F; --accent: #0E6F68; --accent-wash: #E3F1EF;
+    --critical: #B42318; --high: #B93815; --medium: #8F5200; --low: #1D5FA0; --info: #555A61; --ok: #2B7A3D;
+    --critical-wash: #F8E9E7; --high-wash: #F8EBE7; --medium-wash: #F4EEE5; --low-wash: #E8EFF6; --info-wash: #EEEFEF;
+    --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, "DejaVu Sans Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/20px var(--sans); }
+  main { max-width: 820px; margin: 0 auto; padding: 32px 24px 48px; }
+  h1 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 0; }
+  h2 { font-size: 16px; line-height: 24px; font-weight: 600; margin: 0 0 8px; }
+  h3 { font-size: 13px; font-weight: 600; margin: 0; }
+  p { margin: 0 0 8px; }
+  section { margin-top: 28px; break-inside: auto; }
+  .label { font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: var(--subtle); font-weight: 500; }
+  .muted { color: var(--muted); }
+  .subtle { color: var(--subtle); font-size: 12px; line-height: 16px; }
+  .mono { font-family: var(--mono); font-size: 12px; }
+  .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+  .brand { display: flex; gap: 10px; align-items: center; }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; margin-top: 16px; }
+  .facts div { min-width: 0; overflow-wrap: anywhere; }
+  .verdict { margin-top: 20px; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; background: var(--surface); font-size: 14px; }
+  .verdict.bad { border-left-color: var(--critical); }
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 6px; background: var(--surface); margin-top: 16px; }
+  .kpis div { padding: 10px 12px; border-left: 1px solid var(--line); }
+  .kpis div:first-child { border-left: 0; }
+  .kpis strong { display: block; font-size: 22px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .panel { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 12px 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); }
+  th { text-align: left; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: var(--subtle); font-weight: 500; background: var(--sunken); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+  tr { break-inside: avoid; }
+  .table { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .sev { display: inline-flex; gap: 4px; align-items: center; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 18px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+  {% for name in ["critical", "high", "medium", "low", "info"] %}
+  .sev-{{ name }} { color: var(--{{ name }}); background: var(--{{ name }}-wash); }
+  .bar-{{ name }} { background: var(--{{ name }}); }
+  {% endfor %}
+  .bars { display: grid; grid-template-columns: 90px 1fr 48px; gap: 6px 10px; align-items: center; }
+  .track { height: 10px; background: var(--sunken); border-radius: 2px; overflow: hidden; }
+  .track span { display: block; height: 100%; }
+  .card { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 12px 14px; margin-bottom: 10px; break-inside: avoid; }
+  .card-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .todo { margin: 0; padding-left: 20px; }
+  .todo li { margin-bottom: 10px; break-inside: avoid; }
+  .timeline { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--line-strong); }
+  .timeline li { position: relative; padding: 0 0 8px 16px; break-inside: avoid; }
+  .timeline li::before { content: ""; position: absolute; left: -4px; top: 7px; width: 7px; height: 7px; border-radius: 999px; background: var(--line-strong); }
+  dl.glossary { display: grid; grid-template-columns: 150px 1fr; gap: 6px 16px; margin: 0; }
+  dl.glossary dt { font-weight: 600; }
+  dl.glossary dd { margin: 0; color: var(--muted); }
+  svg text { font-family: var(--sans); font-size: 10px; fill: var(--subtle); }
+  footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--line); }
+  @page { size: A4; margin: 14mm 12mm; }
+  @media print {
+    body { background: #fff; }
+    main { max-width: none; padding: 0; }
+    h2 { break-after: avoid; }
+    .page-break { break-before: page; }
+  }
+  @media (max-width: 640px) {
+    .facts, .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kpis div:nth-child(3) { border-left: 0; }
+    .grid2 { grid-template-columns: 1fr; }
+    dl.glossary { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div>
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="#14161A" stroke-width="1.6" stroke-linecap="round"><path d="M5 19a10 10 0 0 1 0-14"/><path d="M8.5 15.5a5 5 0 0 1 0-7"/><path d="M19 19a10 10 0 0 0 0-14" opacity=".35"/></g><circle cx="12" cy="12" r="1.8" fill="#14161A"/></svg>
+      <h1>Session report</h1>
+    </div>
+    <p class="muted" style="margin-top:4px">{{ s.kind | humanize }} · <span class="mono">{{ s.source }}</span></p>
+  </div>
+  <div class="subtle" style="text-align:right">
+    AI-NIDS {{ version }}<br>
+    Generated {{ d.generated_at | time }}<br>
+    Times in {{ timezone }}
+  </div>
+</header>
+
+<div class="facts">
+  <div><div class="label">Started</div>{{ s.started_at | time }}</div>
+  <div><div class="label">Stopped</div>{{ s.stopped_at | time if s.stopped_at else "still running" }}</div>
+  <div><div class="label">Duration</div>{{ d.duration_s | duration }}</div>
+  <div><div class="label">Status</div>{{ s.status | humanize }}</div>
+  <div><div class="label">Detection</div>{{ ("Model " ~ s.model_version) if s.model_version else "Rules only (no model)" }}</div>
+  <div><div class="label">Capture backend</div>{{ s.backend }}</div>
+  <div><div class="label">Session id</div><span class="mono">{{ s.id }}</span></div>
+</div>
+
+{% if s.error %}
+<div class="verdict bad" role="alert"><strong>The session ended with an error:</strong> {{ s.error }}</div>
+{% endif %}
+<div class="verdict{{ ' bad' if d.open_counts.critical + d.open_counts.high > 0 else '' }}">{{ verdict }}</div>
+
+<!-- 1. Summary -->
+<section>
+  <h2>Summary</h2>
+  <div class="kpis">
+    <div><span class="label">Packets</span><strong>{{ d.totals.packets | num }}</strong></div>
+    <div><span class="label">Traffic</span><strong>{{ d.totals.bytes | bytes }}</strong></div>
+    <div><span class="label">Flows stored</span><strong>{{ d.totals.flows | num }}</strong></div>
+    <div><span class="label">Alerts</span><strong>{{ d.alert_total | num }}</strong><span class="subtle">{{ (d.open_counts.values() | sum) | num }} open</span></div>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="panel">
+      <h3 style="margin-bottom:8px">Alerts by severity</h3>
+      <div class="bars">
+        {% for name, n in d.severity_counts.items() %}
+        <span class="sev sev-{{ name }}"><span aria-hidden="true">{{ marks[name] }}</span>{{ name }}</span>
+        <span class="track"><span class="bar-{{ name }}" style="width: {{ (n / severity_peak * 100) | round(1) }}%"></span></span>
+        <span class="num">{{ n | num }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-bottom:8px">Review status</h3>
+      {% if d.alert_total %}
+      <table>
+        {% for status in ["new", "acknowledged", "resolved", "false_positive"] %}
+        <tr><td style="padding-left:0">{{ status | humanize }}</td><td class="num">{{ (d.status_counts.get(status, 0)) | num }}</td></tr>
+        {% endfor %}
+      </table>
+      {% else %}
+      <p class="muted">Nothing to review.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- 2. What should I do -->
+<section>
+  <h2>What should I do?</h2>
+  {% if d.actions %}
+  <ol class="todo">
+    {% for a in d.actions %}
+    <li>
+      <span class="sev sev-{{ a.severity }}"><span aria-hidden="true">{{ marks[a.severity] }}</span>{{ a.severity }}</span>
+      <strong>{{ a.title }}</strong> <span class="muted">· {{ a.count }} open alert{{ "s" if a.count != 1 else "" }} · from <span class="mono">{{ a.sources | join(", ") }}</span></span>
+      <p style="margin-top:4px">{{ a.recommendation }}</p>
+    </li>
+    {% endfor %}
+    <li>When an alert turns out to be harmless, mark it as a false positive in the Alerts page. That adds a suppression rule so it isn't raised again.</li>
+  </ol>
+  {% elif d.alert_total %}
+  <p>Every alert in this session has already been reviewed. Nothing is waiting.</p>
+  {% else %}
+  <p>Nothing to act on. If you expected detections (for example during a test scan), check that the sensor watched the right interface and that the thresholds in Settings suit your network.</p>
+  {% endif %}
+</section>
+
+<!-- 3. Timeline -->
+<section>
+  <h2>Timeline</h2>
+  {% if chart %}
+  <div class="panel">
+    <div class="subtle" style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Bytes per {{ chart.bucket }}; red marks show when alerts were raised</span><span>{{ chart.peak_label }}</span></div>
+    <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" width="100%" role="img" aria-label="Traffic over the session, {{ chart.peak_label }}, with {{ chart.ticks | length }} intervals containing alerts">
+      <line x1="0" x2="{{ chart.width }}" y1="{{ chart.base }}" y2="{{ chart.base }}" stroke="#E4E2DC"/>
+      {% for r in chart.rects %}<rect x="{{ r.x }}" y="{{ r.y }}" width="{{ r.w }}" height="{{ r.h }}" fill="#0E6F68" opacity=".75"/>{% endfor %}
+      {% for t in chart.ticks %}<path d="M{{ t.x - 3.5 }} 2 L{{ t.x + 3.5 }} 2 L{{ t.x }} 9 Z" fill="#B42318"><title>{{ t.n }} alert(s)</title></path>{% endfor %}
+      <text x="0" y="{{ chart.height - 4 }}">{{ chart.start }}</text>
+      <text x="{{ chart.width }}" y="{{ chart.height - 4 }}" text-anchor="end">{{ chart.end }}</text>
+    </svg>
+  </div>
+  {% else %}
+  <p class="muted">No traffic was recorded for this session.</p>
+  {% endif %}
+  {% if d.timeline %}
+  <ul class="timeline" style="margin-top:14px">
+    {% set live = s.kind == "live" %}
+    {% if live %}<li><span class="mono subtle">{{ s.started_at | clock }}</span> Session started</li>{% endif %}
+    {% for a in d.timeline %}
+    <li><span class="mono subtle">{{ a.created_at | clock }}</span>
+      <span class="sev sev-{{ a.severity }}"><span aria-hidden="true">{{ marks[a.severity] }}</span>{{ a.severity }}</span>
+      {{ a.title }} <span class="mono">{{ a.src or "*" }} → {{ a | endpoint }}</span>{% if a.occurrences > 1 %} <span class="muted">· {{ a.occurrences | num }} hits until {{ a.last_seen | clock }}</span>{% endif %}
+    </li>
+    {% endfor %}
+    {% if d.alert_total > d.timeline | length %}<li class="muted">… and {{ d.alert_total - d.timeline | length }} more alerts</li>{% endif %}
+    {% if live and s.stopped_at %}<li><span class="mono subtle">{{ s.stopped_at | clock }}</span> Session stopped</li>{% endif %}
+  </ul>
+  {% endif %}
+</section>
+
+<!-- 4. Top alerts -->
+{% if d.top_alerts %}
+<section class="page-break">
+  <h2>Top alerts</h2>
+  <p class="muted">Most severe first, then by number of hits.</p>
+  <div class="table">
+  <table>
+    <thead><tr><th>Severity</th><th>Detection</th><th>Source → destination</th><th class="num">Hits</th><th class="num">Conf.</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for a in d.top_alerts %}
+    <tr>
+      <td><span class="sev sev-{{ a.severity }}"><span aria-hidden="true">{{ marks[a.severity] }}</span>{{ a.severity }}</span></td>
+      <td>{{ a.title }}<div class="subtle mono">{{ a.id }}{% if a.mitre %} · {{ a.mitre }}{% endif %}</div></td>
+      <td class="mono">{{ a.src or "*" }} → {{ a | endpoint }}</td>
+      <td class="num">{{ a.occurrences | num }}</td>
+      <td class="num">{{ a.confidence | pct }}</td>
+      <td>{{ a.status | humanize }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <h2 style="margin-top:24px">Details</h2>
+  {% for a in d.top_alerts[:6] %}
+  <div class="card">
+    <div class="card-head">
+      <span class="sev sev-{{ a.severity }}"><span aria-hidden="true">{{ marks[a.severity] }}</span>{{ a.severity }}</span>
+      <h3>{{ a.title }}</h3>
+      <span class="mono subtle">{{ a.id }}</span>
+    </div>
+    <p class="mono">{{ a.src or "*" }} → {{ a | endpoint }}{% if a.protocol is not none %} · {{ a.protocol | protocol }}{% endif %} · {{ "Model (ML)" if a.source == "ml" else a.source | humanize }}</p>
+    <p class="subtle">First seen {{ a.created_at | time }} · last seen {{ a.last_seen | time }} · {{ a.occurrences | num }} hits · confidence {{ a.confidence | pct }}{% if a.mitre %} · MITRE ATT&amp;CK {{ a.mitre }}{% endif %}</p>
+    <p><strong>What happened.</strong> {{ a.explanation }}</p>
+    <p><strong>What to do.</strong> {{ a.recommendation }}</p>
+    {% if a.note %}<p class="muted"><strong>Analyst note.</strong> {{ a.note }}</p>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<!-- 5. Traffic -->
+<section>
+  <h2>Who was talking</h2>
+  <div class="grid2">
+    <div>
+      <h3 style="margin-bottom:6px">Top sources by bytes</h3>
+      {% if d.talkers %}
+      <div class="table"><table>
+        <thead><tr><th>Source</th><th class="num">Bytes</th><th class="num">Flows</th></tr></thead>
+        <tbody>{% for t in d.talkers %}<tr><td class="mono">{{ t.ip }}</td><td class="num">{{ t.bytes | bytes }}</td><td class="num">{{ t.flows | num }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% else %}<p class="muted">No flows stored.</p>{% endif %}
+    </div>
+    <div>
+      <h3 style="margin-bottom:6px">Top destination ports</h3>
+      {% if d.ports %}
+      <div class="table"><table>
+        <thead><tr><th>Port</th><th class="num">Flows</th></tr></thead>
+        <tbody>{% for p in d.ports %}<tr><td class="mono">{{ p.port }}/{{ p.protocol }}</td><td class="num">{{ p.flows | num }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% else %}<p class="muted">No TCP or UDP flows stored.</p>{% endif %}
+      {% if d.protocols %}
+      <p class="subtle" style="margin-top:8px">Protocols: {% for p in d.protocols %}{{ p.name }} {{ p.flows | num }}{{ ", " if not loop.last }}{% endfor %} flows</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- 6. Capture health -->
+{% if d.health or d.notes %}
+<section>
+  <h2>Capture health</h2>
+  {% if d.health %}
+  <div class="table" style="max-width:420px"><table>
+    <tbody>{% for label, value in d.health %}<tr><td>{{ label }}</td><td class="num">{{ value }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% endif %}
+  {% for note in d.notes %}<p class="muted" style="margin-top:8px">{{ note }}</p>{% endfor %}
+</section>
+{% endif %}
+
+<!-- 7. Glossary -->
+<section class="page-break">
+  <h2>Glossary</h2>
+  <dl class="glossary">
+    {% for term, meaning in glossary %}<dt>{{ term }}</dt><dd>{{ meaning }}</dd>{% endfor %}
+  </dl>
+</section>
+
+<section>
+  <h2>Limits of this report</h2>
+  <p class="muted">An intrusion detection system only reports what its detectors recognise. The rules catch scans, sweeps and floods well; the model catches attack types it was trained on much better than new ones. No alerts means nothing matched, not that the network is safe. See the Model page for measured detection and false-alarm rates.</p>
+</section>
+
+<footer class="subtle">
+  AI-NIDS {{ version }} · session <span class="mono">{{ s.id }}</span> · generated {{ d.generated_at | time }}. This report contains network addresses; share it only with people who should see them.
+</footer>
+</main>
+</body>
+</html>

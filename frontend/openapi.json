@@ -1,0 +1,4353 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AI-NIDS",
+    "version": "2.0.0.dev0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Healthz",
+        "description": "Liveness: the process answers.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Healthz Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Readyz",
+        "description": "Readiness: the database answers.",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Metrics",
+        "description": "Prometheus metrics (loopback-only by default, like the rest of the API).",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/status": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Status",
+        "description": "Whether first-run setup is needed and whether this browser is signed in. Returns the CSRF\ntoken for the signed-in session (the UI keeps it in memory, not in storage).",
+        "operationId": "status_api_auth_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/setup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Setup",
+        "description": "Create the admin account. Only possible while no account exists.",
+        "operationId": "setup_api_auth_setup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/auth/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change Password",
+        "description": "Change the password and sign out every other session.",
+        "operationId": "change_password_api_auth_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensor/capabilities": {
+      "get": {
+        "tags": [
+          "sensor"
+        ],
+        "summary": "Capabilities",
+        "description": "Whether this machine can capture, which backend will be used, and how to fix problems.",
+        "operationId": "capabilities_api_sensor_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensor/interfaces": {
+      "get": {
+        "tags": [
+          "sensor"
+        ],
+        "summary": "Interfaces",
+        "description": "Capture interfaces: adapters with a routable IPv4 address first, loopback last.",
+        "operationId": "interfaces_api_sensor_interfaces_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InterfaceInfo"
+                  },
+                  "type": "array",
+                  "title": "Response Interfaces Api Sensor Interfaces Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensor/status": {
+      "get": {
+        "tags": [
+          "sensor"
+        ],
+        "summary": "Status",
+        "operationId": "status_api_sensor_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensorState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensor/start": {
+      "post": {
+        "tags": [
+          "sensor"
+        ],
+        "summary": "Start",
+        "description": "Start capturing on an interface, with the active model (if any).",
+        "operationId": "start_api_sensor_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSensor"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensorState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensor/stop": {
+      "post": {
+        "tags": [
+          "sensor"
+        ],
+        "summary": "Stop",
+        "description": "Stop capturing. Open flows are flushed and the session is closed before the sensor exits.",
+        "operationId": "stop_api_sensor_stop_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensorState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "List Alerts",
+        "description": "Alerts, most recently active first, filtered and paginated.",
+        "operationId": "list_alerts_api_alerts_get",
+        "parameters": [
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Severity"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "new",
+                  "acknowledged",
+                  "resolved",
+                  "false_positive"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "title": "Type"
+            }
+          },
+          {
+            "name": "src",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Src"
+            }
+          },
+          {
+            "name": "dst",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dst"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AlertOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts/export": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Export Alerts",
+        "description": "Every alert matching the filters (up to 100,000), as CSV or JSON. CSV cells that a\nspreadsheet would run as a formula are prefixed with an apostrophe.",
+        "operationId": "export_alerts_api_alerts_export_get",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "csv",
+                "json"
+              ],
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Severity"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "new",
+                  "acknowledged",
+                  "resolved",
+                  "false_positive"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "title": "Type"
+            }
+          },
+          {
+            "name": "src",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Src"
+            }
+          },
+          {
+            "name": "dst",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dst"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/csv": {},
+              "application/json": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts/{alert_id}": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Get Alert",
+        "operationId": "get_alert_api_alerts__alert_id__get",
+        "parameters": [
+          {
+            "name": "alert_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Alert Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Update Alert",
+        "description": "Acknowledge, resolve or mark as false positive (which also suppresses repeats), and/or\nchange the note.",
+        "operationId": "update_alert_api_alerts__alert_id__patch",
+        "parameters": [
+          {
+            "name": "alert_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Alert Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/flows": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "List Flows",
+        "operationId": "list_flows_api_flows_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "ip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Either endpoint",
+              "title": "Ip"
+            },
+            "description": "Either endpoint"
+          },
+          {
+            "name": "port",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 65535,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Port"
+            }
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 255,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Protocol"
+            }
+          },
+          {
+            "name": "flow_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "title": "Flow Id"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_FlowOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/flows/export": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Export Flows",
+        "description": "Every flow matching the filters (up to 100,000), as CSV (summary columns) or JSON (with\nevery measured feature).",
+        "operationId": "export_flows_api_flows_export_get",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "csv",
+                "json"
+              ],
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "ip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Either endpoint",
+              "title": "Ip"
+            },
+            "description": "Either endpoint"
+          },
+          {
+            "name": "port",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 65535,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Port"
+            }
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 255,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Protocol"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/csv": {},
+              "application/json": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "List Sessions",
+        "operationId": "list_sessions_api_sessions_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_SessionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Get Session",
+        "operationId": "get_session_api_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats/timeseries": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Timeseries",
+        "description": "Traffic per second (resolution=1, last 24 h) or per minute (resolution=60), summed over\nsessions unless one is given. Replays keep their original timestamps; pass their session.\n\nPer-minute rows are written by the retention roll-up, which only covers complete minutes and\nlags behind capture, so minutes it hasn't reached yet are built from per-second rows. Where\nboth exist the roll-up wins (its seconds may already have expired).",
+        "operationId": "timeseries_api_stats_timeseries_get",
+        "parameters": [
+          {
+            "name": "resolution",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Bucket length in seconds: 1 or 60",
+              "default": 1,
+              "title": "Resolution"
+            },
+            "description": "Bucket length in seconds: 1 or 60"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Epoch seconds; default: last 15 min",
+              "title": "Since"
+            },
+            "description": "Epoch seconds; default: last 15 min"
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Bucket"
+                  },
+                  "title": "Response Timeseries Api Stats Timeseries Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats/summary": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Summary",
+        "description": "Numbers for the Overview KPI strip.",
+        "operationId": "summary_api_stats_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Summary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Runtime Settings",
+        "operationId": "get_runtime_settings_api_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Runtime Settings",
+        "description": "Change some settings. Unknown keys and out-of-range values are rejected (audit SEC-02).",
+        "operationId": "update_runtime_settings_api_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Changes"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppressions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Rules",
+        "operationId": "list_rules_api_suppressions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RuleOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Rules Api Suppressions Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Add Rule",
+        "operationId": "add_rule_api_suppressions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppressions/{rule_id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Disable Rule",
+        "operationId": "disable_rule_api_suppressions__rule_id__delete",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/uploads": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Uploads",
+        "operationId": "list_uploads_api_uploads_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UploadOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Uploads Api Uploads Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Upload Pcap",
+        "description": "Upload a pcap/pcapng file for replay. Stored under its own id; the file's type is checked\nby its signature, not its name (audit SEC-04).",
+        "operationId": "upload_pcap_api_uploads_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_pcap_api_uploads_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Start Job",
+        "operationId": "start_job_api_jobs_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReplayJob"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TrainJob"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PrepareJob"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ReportJob"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Jobs",
+        "operationId": "list_jobs_api_jobs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobOut"
+                  },
+                  "title": "Response List Jobs Api Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Job",
+        "operationId": "get_job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Cancel Job",
+        "operationId": "cancel_job_api_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Cancel Job Api Jobs  Job Id  Cancel Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Logs",
+        "description": "Tail of the API log, or of one job's log (`job:<id>`, e.g. the sensor's).",
+        "operationId": "logs_api_logs_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(api|job:[0-9a-f]{16})$",
+              "default": "api",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "lines",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Lines"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogTail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audit": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Audit Log",
+        "operationId": "audit_log_api_audit_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntry"
+                  },
+                  "title": "Response Audit Log Api Audit Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "List Reports",
+        "description": "Reports, newest first (including ones still being generated).",
+        "operationId": "list_reports_api_reports_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{16}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportOut"
+                  },
+                  "title": "Response List Reports Api Reports Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{report_id}/{fmt}": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Download Report",
+        "operationId": "download_report_api_reports__report_id___fmt__get",
+        "parameters": [
+          {
+            "name": "fmt",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "html",
+                "pdf"
+              ],
+              "type": "string",
+              "title": "Fmt"
+            }
+          },
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Save instead of opening in the browser",
+              "default": false,
+              "title": "Download"
+            },
+            "description": "Save instead of opening in the browser"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{report_id}": {
+      "delete": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Delete Report",
+        "operationId": "delete_report_api_reports__report_id__delete",
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Get Notifications",
+        "description": "Current settings (the SMTP password and webhook secret are never returned) and the\nresult of the last delivery per channel.",
+        "operationId": "get_notifications_api_notifications_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Update Notifications",
+        "description": "Change some settings. Leave out `smtp_password` / `webhook_secret` to keep them; send \"\"\nto clear one.",
+        "operationId": "update_notifications_api_notifications_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Changes"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/test": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Send Test",
+        "description": "Send a test message on one channel with the saved settings, even if it's turned off.",
+        "operationId": "send_test_api_notifications_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "List Models",
+        "operationId": "list_models_api_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Models Api Models Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models/{version}/activate": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Activate",
+        "description": "Use this model the next time the sensor starts.",
+        "operationId": "activate_api_models__version__activate_post",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Activate Api Models  Version  Activate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models/deactivate": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Deactivate",
+        "description": "Run the sensor with heuristics only.",
+        "operationId": "deactivate_api_models_deactivate_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "null"
+                  },
+                  "type": "object",
+                  "title": "Response Deactivate Api Models Deactivate Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models/{version}/report": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Model Report",
+        "description": "The model's evaluation report (per-family results, confusion matrix, threshold sweep).",
+        "operationId": "model_report_api_models__version__report_get",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Model Report Api Models  Version  Report Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AlertOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "last_seen": {
+            "type": "number",
+            "title": "Last Seen"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Severity"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "src": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Src"
+          },
+          "dst": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dst"
+          },
+          "ports": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Ports"
+          },
+          "protocol": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol"
+          },
+          "mitre_technique": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mitre Technique"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "recommendation": {
+            "type": "string",
+            "title": "Recommendation"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Evidence"
+          },
+          "occurrences": {
+            "type": "integer",
+            "title": "Occurrences"
+          },
+          "flow_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flow Ids"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "acknowledged",
+              "resolved",
+              "false_positive"
+            ],
+            "title": "Status"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "created_at",
+          "last_seen",
+          "updated_at",
+          "type",
+          "title",
+          "source",
+          "severity",
+          "confidence",
+          "src",
+          "dst",
+          "ports",
+          "protocol",
+          "mitre_technique",
+          "explanation",
+          "recommendation",
+          "evidence",
+          "occurrences",
+          "flow_ids",
+          "family",
+          "model_version",
+          "status",
+          "note"
+        ],
+        "title": "AlertOut"
+      },
+      "AlertUpdate": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "new",
+                  "acknowledged",
+                  "resolved",
+                  "false_positive"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AlertUpdate"
+      },
+      "AuditEntry": {
+        "properties": {
+          "ts": {
+            "type": "number",
+            "title": "Ts"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ts",
+          "actor",
+          "action",
+          "target",
+          "details"
+        ],
+        "title": "AuditEntry"
+      },
+      "AuthStatus": {
+        "properties": {
+          "setup_required": {
+            "type": "boolean",
+            "title": "Setup Required"
+          },
+          "authenticated": {
+            "type": "boolean",
+            "title": "Authenticated"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "csrf_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csrf Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "setup_required",
+          "authenticated"
+        ],
+        "title": "AuthStatus"
+      },
+      "Body_upload_pcap_api_uploads_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_pcap_api_uploads_post"
+      },
+      "Bucket": {
+        "properties": {
+          "ts": {
+            "type": "integer",
+            "title": "Ts"
+          },
+          "packets": {
+            "type": "integer",
+            "title": "Packets"
+          },
+          "bytes": {
+            "type": "integer",
+            "title": "Bytes"
+          },
+          "tcp": {
+            "type": "integer",
+            "title": "Tcp"
+          },
+          "udp": {
+            "type": "integer",
+            "title": "Udp"
+          },
+          "icmp": {
+            "type": "integer",
+            "title": "Icmp"
+          },
+          "other": {
+            "type": "integer",
+            "title": "Other"
+          },
+          "flows_started": {
+            "type": "integer",
+            "title": "Flows Started"
+          },
+          "flows_ended": {
+            "type": "integer",
+            "title": "Flows Ended"
+          },
+          "alerts": {
+            "type": "integer",
+            "title": "Alerts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ts",
+          "packets",
+          "bytes",
+          "tcp",
+          "udp",
+          "icmp",
+          "other",
+          "flows_started",
+          "flows_ended",
+          "alerts"
+        ],
+        "title": "Bucket"
+      },
+      "CapabilityReport": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "title": "Platform"
+          },
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "nfstream",
+                  "scapy"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/Check"
+            },
+            "type": "array",
+            "title": "Checks"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "backend",
+          "checks",
+          "ok"
+        ],
+        "title": "CapabilityReport"
+      },
+      "ChannelStatus": {
+        "properties": {
+          "last_ok_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Ok At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          }
+        },
+        "type": "object",
+        "title": "ChannelStatus"
+      },
+      "Check": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "fix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "status",
+          "detail"
+        ],
+        "title": "Check"
+      },
+      "Credentials": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Credentials"
+      },
+      "FlowOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "first_seen": {
+            "type": "number",
+            "title": "First Seen"
+          },
+          "last_seen": {
+            "type": "number",
+            "title": "Last Seen"
+          },
+          "src_ip": {
+            "type": "string",
+            "title": "Src Ip"
+          },
+          "dst_ip": {
+            "type": "string",
+            "title": "Dst Ip"
+          },
+          "src_port": {
+            "type": "integer",
+            "title": "Src Port"
+          },
+          "dst_port": {
+            "type": "integer",
+            "title": "Dst Port"
+          },
+          "protocol": {
+            "type": "integer",
+            "title": "Protocol"
+          },
+          "packets": {
+            "type": "integer",
+            "title": "Packets"
+          },
+          "payload_bytes": {
+            "type": "integer",
+            "title": "Payload Bytes"
+          },
+          "ip_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Bytes"
+          },
+          "end_reason": {
+            "type": "string",
+            "title": "End Reason"
+          },
+          "app_protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Protocol"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "flow_id",
+          "first_seen",
+          "last_seen",
+          "src_ip",
+          "dst_ip",
+          "src_port",
+          "dst_port",
+          "protocol",
+          "packets",
+          "payload_bytes",
+          "ip_bytes",
+          "end_reason",
+          "app_protocol",
+          "stats"
+        ],
+        "title": "FlowOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InterfaceInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "ipv4": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ipv4"
+          },
+          "ipv6": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ipv6"
+          },
+          "mac": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mac"
+          },
+          "loopback": {
+            "type": "boolean",
+            "title": "Loopback"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "label",
+          "description",
+          "ipv4",
+          "ipv6",
+          "mac",
+          "loopback"
+        ],
+        "title": "InterfaceInfo"
+      },
+      "JobOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "result": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "params",
+          "status",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "exit_code",
+          "result",
+          "created_by"
+        ],
+        "title": "JobOut"
+      },
+      "LogTail": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "lines"
+        ],
+        "title": "LogTail"
+      },
+      "ModelOut": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "dataset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset"
+          },
+          "protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol"
+          },
+          "feature_set": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Set"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "created_at",
+          "dataset",
+          "protocol",
+          "feature_set",
+          "summary",
+          "active"
+        ],
+        "title": "ModelOut"
+      },
+      "NotificationSettings": {
+        "properties": {
+          "email_enabled": {
+            "type": "boolean",
+            "title": "Email Enabled",
+            "default": false
+          },
+          "email_min_severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Email Min Severity",
+            "default": "high"
+          },
+          "smtp_host": {
+            "type": "string",
+            "maxLength": 253,
+            "title": "Smtp Host",
+            "default": ""
+          },
+          "smtp_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Smtp Port",
+            "default": 587
+          },
+          "smtp_security": {
+            "type": "string",
+            "enum": [
+              "starttls",
+              "tls",
+              "none"
+            ],
+            "title": "Smtp Security",
+            "default": "starttls"
+          },
+          "smtp_username": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Smtp Username",
+            "default": ""
+          },
+          "smtp_password": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Smtp Password",
+            "default": ""
+          },
+          "email_from": {
+            "type": "string",
+            "maxLength": 254,
+            "title": "Email From",
+            "default": ""
+          },
+          "email_to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Email To",
+            "default": []
+          },
+          "webhook_enabled": {
+            "type": "boolean",
+            "title": "Webhook Enabled",
+            "default": false
+          },
+          "webhook_min_severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Webhook Min Severity",
+            "default": "high"
+          },
+          "webhook_url": {
+            "type": "string",
+            "maxLength": 2048,
+            "title": "Webhook Url",
+            "default": ""
+          },
+          "webhook_format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "slack",
+              "discord"
+            ],
+            "title": "Webhook Format",
+            "default": "json"
+          },
+          "webhook_secret": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Webhook Secret",
+            "default": ""
+          },
+          "include_replays": {
+            "type": "boolean",
+            "title": "Include Replays",
+            "default": false
+          },
+          "max_per_hour": {
+            "type": "integer",
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Max Per Hour",
+            "default": 12
+          },
+          "digest_enabled": {
+            "type": "boolean",
+            "title": "Digest Enabled",
+            "default": false
+          },
+          "digest_hour": {
+            "type": "integer",
+            "maximum": 23.0,
+            "minimum": 0.0,
+            "title": "Digest Hour",
+            "default": 8
+          },
+          "link_base_url": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Link Base Url",
+            "default": "http://127.0.0.1:8000"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NotificationSettings"
+      },
+      "NotificationSettingsOut": {
+        "properties": {
+          "values": {
+            "$ref": "#/components/schemas/NotificationSettings"
+          },
+          "smtp_password_set": {
+            "type": "boolean",
+            "title": "Smtp Password Set"
+          },
+          "webhook_secret_set": {
+            "type": "boolean",
+            "title": "Webhook Secret Set"
+          },
+          "status": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ChannelStatus"
+            },
+            "type": "object",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values",
+          "smtp_password_set",
+          "webhook_secret_set",
+          "status"
+        ],
+        "title": "NotificationSettingsOut",
+        "description": "What the API returns: the settings with secrets blanked, plus delivery status."
+      },
+      "Page_AlertOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AlertOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[AlertOut]"
+      },
+      "Page_FlowOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FlowOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[FlowOut]"
+      },
+      "Page_SessionOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SessionOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[SessionOut]"
+      },
+      "PasswordChange": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 12,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordChange"
+      },
+      "PrepareJob": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "prepare",
+            "title": "Kind"
+          },
+          "dataset": {
+            "type": "string",
+            "enum": [
+              "cicids2017",
+              "unsw-nb15"
+            ],
+            "title": "Dataset"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "dataset"
+        ],
+        "title": "PrepareJob"
+      },
+      "ReplayJob": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "replay",
+            "title": "Kind"
+          },
+          "upload_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$",
+            "title": "Upload Id"
+          },
+          "use_model": {
+            "type": "boolean",
+            "title": "Use Model",
+            "default": true
+          },
+          "shift_to_now": {
+            "type": "boolean",
+            "title": "Shift To Now",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "upload_id"
+        ],
+        "title": "ReplayJob"
+      },
+      "ReportJob": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "report",
+            "title": "Kind"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$",
+            "title": "Session Id"
+          },
+          "pdf": {
+            "type": "boolean",
+            "title": "Pdf",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "session_id"
+        ],
+        "title": "ReportJob"
+      },
+      "ReportOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "html": {
+            "type": "boolean",
+            "title": "Html"
+          },
+          "pdf": {
+            "type": "boolean",
+            "title": "Pdf"
+          },
+          "pdf_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "status",
+          "created_at",
+          "finished_at",
+          "html",
+          "pdf",
+          "pdf_error",
+          "error"
+        ],
+        "title": "ReportOut"
+      },
+      "RuleIn": {
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "src": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Src"
+          },
+          "dst": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dst"
+          },
+          "dst_port": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 65535.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dst Port"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RuleIn"
+      },
+      "RuleOut": {
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "src": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Src"
+          },
+          "dst": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dst"
+          },
+          "dst_port": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 65535.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dst Port"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Reason",
+            "default": ""
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "alert_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "created_by",
+          "active",
+          "alert_id"
+        ],
+        "title": "RuleOut"
+      },
+      "RuntimeSettings": {
+        "properties": {
+          "scan_window_s": {
+            "type": "number",
+            "maximum": 600.0,
+            "minimum": 5.0,
+            "title": "Scan Window S",
+            "description": "Port scan / sweep time window",
+            "default": 30.0,
+            "apply": "restart"
+          },
+          "scan_min_ports": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 5.0,
+            "title": "Scan Min Ports",
+            "description": "Ports on one host to call it a scan",
+            "default": 25,
+            "apply": "restart"
+          },
+          "sweep_min_hosts": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 5.0,
+            "title": "Sweep Min Hosts",
+            "description": "Hosts in one subnet to call it a sweep",
+            "default": 20,
+            "apply": "restart"
+          },
+          "flood_min_syn_rate": {
+            "type": "number",
+            "maximum": 10000000.0,
+            "minimum": 10.0,
+            "title": "Flood Min Syn Rate",
+            "description": "SYNs/s floor for a SYN flood",
+            "default": 100.0,
+            "apply": "restart"
+          },
+          "flood_min_pps": {
+            "type": "number",
+            "maximum": 100000000.0,
+            "minimum": 100.0,
+            "title": "Flood Min Pps",
+            "description": "Packets/s floor for a UDP/ICMP flood",
+            "default": 5000.0,
+            "apply": "restart"
+          },
+          "flood_z": {
+            "type": "number",
+            "maximum": 50.0,
+            "minimum": 2.0,
+            "title": "Flood Z",
+            "description": "Standard deviations above normal for a flood",
+            "default": 6.0,
+            "apply": "restart"
+          },
+          "allowed_protocols": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Allowed Protocols",
+            "description": "IP protocols that never alert",
+            "default": [
+              1,
+              2,
+              6,
+              17,
+              58
+            ],
+            "apply": "restart"
+          },
+          "dedup_window_s": {
+            "type": "number",
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Dedup Window S",
+            "description": "Merge repeats of an alert within this window",
+            "default": 900.0,
+            "apply": "restart"
+          },
+          "flow_sample_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Flow Sample Rate",
+            "description": "Share of flows stored",
+            "default": 1.0,
+            "apply": "restart"
+          },
+          "attack_threshold": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attack Threshold",
+            "description": "Classifier threshold (None = model default)",
+            "apply": "restart"
+          },
+          "novelty_threshold": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Novelty Threshold",
+            "description": "Novelty threshold (None = model default)",
+            "apply": "restart"
+          },
+          "retention_flows_days": {
+            "type": "number",
+            "maximum": 3650.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Retention Flows Days",
+            "description": "Keep flows this long",
+            "default": 7.0,
+            "apply": "live"
+          },
+          "retention_alerts_days": {
+            "type": "number",
+            "maximum": 3650.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Retention Alerts Days",
+            "description": "Keep alerts this long",
+            "default": 90.0,
+            "apply": "live"
+          },
+          "pseudonymize_ips": {
+            "type": "boolean",
+            "title": "Pseudonymize Ips",
+            "description": "Store IP addresses as keyed hashes",
+            "default": false,
+            "apply": "restart"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RuntimeSettings"
+      },
+      "SensorState": {
+        "properties": {
+          "running": {
+            "type": "boolean",
+            "title": "Running"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "interface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interface"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "managed": {
+            "type": "boolean",
+            "title": "Managed"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "running",
+          "job_id",
+          "pid",
+          "interface",
+          "session_id",
+          "started_at",
+          "managed",
+          "model_version"
+        ],
+        "title": "SensorState"
+      },
+      "SessionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "backend": {
+            "type": "string",
+            "title": "Backend"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "started_at": {
+            "type": "number",
+            "title": "Started At"
+          },
+          "stopped_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped At"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "source",
+          "backend",
+          "model_version",
+          "started_at",
+          "stopped_at",
+          "status",
+          "error",
+          "metrics"
+        ],
+        "title": "SessionOut"
+      },
+      "SettingsOut": {
+        "properties": {
+          "values": {
+            "$ref": "#/components/schemas/RuntimeSettings"
+          },
+          "apply": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Apply"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values",
+          "apply"
+        ],
+        "title": "SettingsOut"
+      },
+      "SetupRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 12,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "SetupRequest"
+      },
+      "StartSensor": {
+        "properties": {
+          "interface": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Interface"
+          },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "scapy",
+              "nfstream"
+            ],
+            "title": "Backend",
+            "default": "auto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "interface"
+        ],
+        "title": "StartSensor"
+      },
+      "Summary": {
+        "properties": {
+          "open_alerts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Open Alerts"
+          },
+          "alerts_last_24h": {
+            "type": "integer",
+            "title": "Alerts Last 24H"
+          },
+          "flows_last_hour": {
+            "type": "integer",
+            "title": "Flows Last Hour"
+          },
+          "top_talkers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Top Talkers"
+          },
+          "protocols_last_15m": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Protocols Last 15M"
+          }
+        },
+        "type": "object",
+        "required": [
+          "open_alerts",
+          "alerts_last_24h",
+          "flows_last_hour",
+          "top_talkers",
+          "protocols_last_15m"
+        ],
+        "title": "Summary"
+      },
+      "TestRequest": {
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "email",
+              "webhook"
+            ],
+            "title": "Channel"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel"
+        ],
+        "title": "TestRequest"
+      },
+      "TestResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "message"
+        ],
+        "title": "TestResult"
+      },
+      "TrainJob": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "train",
+            "title": "Kind"
+          },
+          "dataset": {
+            "type": "string",
+            "enum": [
+              "cicids2017",
+              "unsw-nb15"
+            ],
+            "title": "Dataset"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "day",
+              "random",
+              "official"
+            ],
+            "title": "Protocol",
+            "default": "day"
+          },
+          "features": {
+            "type": "string",
+            "enum": [
+              "full",
+              "shared"
+            ],
+            "title": "Features",
+            "default": "full"
+          },
+          "sample_frac": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Frac"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "dataset"
+        ],
+        "title": "TrainJob"
+      },
+      "UploadOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "size",
+          "sha256",
+          "format",
+          "created_at"
+        ],
+        "title": "UploadOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

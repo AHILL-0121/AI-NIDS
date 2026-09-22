@@ -2,6 +2,9 @@
 *.env
 *.md
 !README.md
+!docs/**/*.md
+!.github/*.md
+/docs/adr/
 /plan
 
 # --- Secrets ---
@@ -40,8 +43,12 @@ frontend/playwright-report/
 # --- Captures & runtime output ---
 *.pcap
 *.pcapng
+!backend/tests/fixtures/pcaps/*.pcap
 logs/
-reports/
+/reports/
+backend/data/reports/
+backend/data/jobs/
+backend/data/uploads/
 
 # --- OS / editor ---
 .DS_Store

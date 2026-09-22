@@ -10,6 +10,7 @@ from scapy.utils import wrpcapng
 from nids.core.schemas.flow import EndReason, FlowRecord
 from nids.sensor.capture import CaptureError, LiveScapySource, PcapReplaySource
 from nids.sensor.capture.nfstream_source import flow_from_nfstream
+from nids.sensor.runner import build_replay_source
 
 from .helpers import CLIENT, SERVER, dns_exchange, tcp_session
 
@@ -47,6 +48,24 @@ def test_replay_is_deterministic(sample_pcap: Path) -> None:
     second, _ = replay(sample_pcap)
 
     assert [f.to_dict() for f in first] == [f.to_dict() for f in second]
+
+
+def test_replay_can_shift_the_capture_to_now(sample_pcap: Path) -> None:
+    original, _ = replay(sample_pcap)
+    shifted: list[FlowRecord] = []
+    PcapReplaySource(sample_pcap, shift_to_now=True).run(shifted.append, threading.Event())
+
+    offset = shifted[0].first_seen - original[0].first_seen
+    assert abs(max(f.last_seen for f in shifted) - time.time()) < 5  # the capture ends now
+    assert [f.first_seen - offset for f in shifted] == pytest.approx(
+        [f.first_seen for f in original]
+    )
+    assert [f.duration for f in shifted] == pytest.approx([f.duration for f in original])
+
+
+def test_shift_to_now_needs_the_scapy_replay_backend(sample_pcap: Path) -> None:
+    with pytest.raises(ValueError, match="scapy"):
+        build_replay_source(sample_pcap, backend="nfstream", shift_to_now=True)
 
 
 def test_replay_reads_pcapng(tmp_path: Path) -> None:

@@ -7,13 +7,13 @@ from typing import Any, Literal
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import IsolationForest
 from sklearn.model_selection import train_test_split
 
 from nids.core.schemas.features_v1 import FEATURE_NAMES, SCHEMA_HASH, UNSW_SHARED_NAMES
 from nids.ml.bundle import DetectorBundle, novelty_transform
 from nids.ml.datasets import DatasetError
-from nids.ml.evaluate import evaluate
+from nids.ml.evaluate import alert_groups, benign_hours, evaluate
+from nids.ml.novelty import EnvelopeNovelty
 from nids.ml.splits import Protocol, split
 
 log = logging.getLogger(__name__)
@@ -32,6 +32,10 @@ class TrainConfig:
     num_leaves: int = 63
     early_stopping_rounds: int = 50
     attack_threshold: float = 0.5
+    # Novelty threshold: chosen on validation so that benign traffic produces at most this many
+    # merged alerts per hour. Falls back to `novelty_fpr` when the dataset lacks endpoints or
+    # timestamps (e.g. UNSW-NB15).
+    novelty_alert_budget: float | None = 5.0
     novelty_fpr: float = 0.005
     novelty_max_train: int = 200_000
 
@@ -57,6 +61,40 @@ def _sample(frame: pd.DataFrame, frac: float, seed: int) -> pd.DataFrame:
 def _stratify(frame: pd.DataFrame) -> pd.Series | None:
     counts = frame["family"].value_counts()
     return frame["family"] if counts.min() >= 2 else None
+
+
+NOVELTY_OFF = 1.01  # calibrated novelty never exceeds 1.0, so this disables novelty alerts
+
+
+def choose_novelty_threshold(
+    bundle: DetectorBundle, train_df: pd.DataFrame, val_df: pd.DataFrame, config: TrainConfig
+) -> tuple[float, dict[str, Any]]:
+    """Lowest threshold whose benign validation traffic stays within the alert budget.
+
+    Uses only the validation slice of the training days; the test split is never consulted."""
+    fallback = 1.0 - config.novelty_fpr
+    hours = benign_hours(train_df)
+    benign_val = val_df[val_df["family"] == "benign"]
+    if config.novelty_alert_budget is None or not hours or alert_groups(benign_val.head(1)) is None:
+        return fallback, {"method": "fixed false-positive rate", "threshold": fallback}
+    scale = len(train_df) / len(val_df)  # validation is a sample of the training days
+    novelty = bundle.score(benign_val)["novelty"].to_numpy()
+    for threshold in (0.99, 0.995, 0.998, 0.999, 0.9995, 0.9998, 0.9999, 0.99995, 0.99999, 1.0):
+        groups = alert_groups(benign_val[novelty >= threshold]) or 0
+        per_hour = groups * scale / hours
+        if per_hour <= config.novelty_alert_budget:
+            return threshold, {
+                "method": "alert budget on validation",
+                "budget_alerts_per_hour": config.novelty_alert_budget,
+                "threshold": threshold,
+                "validation_false_alerts_per_hour": round(per_hour, 2),
+            }
+    return NOVELTY_OFF, {
+        "method": "alert budget on validation",
+        "budget_alerts_per_hour": config.novelty_alert_budget,
+        "threshold": NOVELTY_OFF,
+        "note": "no threshold met the budget; novelty alerts are off (scores still reported)",
+    }
 
 
 def train(frame: pd.DataFrame, dataset: str, config: TrainConfig) -> TrainResult:
@@ -107,10 +145,7 @@ def train(frame: pd.DataFrame, dataset: str, config: TrainConfig) -> TrainResult
         benign_fit = benign_fit.sample(config.novelty_max_train, random_state=config.seed)
     novelty_features = [f for f in features if benign_fit[f].notna().any()]
     fill = {f: float(benign_fit[f].median()) for f in novelty_features}
-    novelty_model = IsolationForest(
-        n_estimators=200, max_samples=256, random_state=config.seed, n_jobs=-1
-    )
-    novelty_model.fit(novelty_transform(benign_fit, novelty_features, fill))
+    novelty_model = EnvelopeNovelty().fit(novelty_transform(benign_fit, novelty_features, fill))
 
     benign_val = val_df[val_df["family"] == "benign"]
     if benign_val.empty:
@@ -132,8 +167,24 @@ def train(frame: pd.DataFrame, dataset: str, config: TrainConfig) -> TrainResult
         attack_threshold=config.attack_threshold,
         novelty_threshold=1.0 - config.novelty_fpr,
     )
+    bundle.novelty_threshold, threshold_info = choose_novelty_threshold(
+        bundle, train_df, val_df, config
+    )
+    val_scores = bundle.score(val_df)
+    val_attack = (val_df["family"] != "benign").to_numpy()
+    threshold_info |= {
+        "validation_novelty_recall": float(
+            (val_scores["novelty"] >= bundle.novelty_threshold)[val_attack].mean()
+        )
+        if val_attack.any()
+        else None,
+        "validation_classifier_fpr": float(
+            (val_scores["attack_prob"] >= config.attack_threshold)[~val_attack].mean()
+        ),
+    }
     trained_families = set(fit_df["family"])
     report = evaluate(bundle, test_df, trained_families)
+    report["validation"] = threshold_info
     report["training"] = {
         "dataset": dataset,
         "split": split_description,

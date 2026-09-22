@@ -1,0 +1,72 @@
+name: backend
+
+on:
+  push:
+    branches: [main, v2]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  test:
+    name: ruff · mypy · pytest (coverage gates)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.30"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install (all extras, locked)
+        run: uv sync --locked --all-extras
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy
+
+      # The runner's desktop Chrome hangs when printing headless, so the report PDF test uses
+      # Chrome Headless Shell, the build Google ships for scripted printing and screenshots.
+      - name: Chrome Headless Shell for the report PDF test
+        run: |
+          npx --yes @puppeteer/browsers install chrome-headless-shell@stable --path "$RUNNER_TEMP/browsers"
+          shell=$(find "$RUNNER_TEMP/browsers" -type f -name chrome-headless-shell | head -n 1)
+          test -x "$shell"
+          echo "NIDS_PDF_BROWSER=$shell" >> "$GITHUB_ENV"
+
+      - name: Tests (fails under 75 % coverage)
+        run: uv run pytest --cov=nids --cov-report=term --cov-report=xml
+        env:
+          NIDS_PDF_NO_SANDBOX: "true"  # same trade as the Docker image: our own script-free page
+
+      - name: Coverage gates for core/ and sensor/ (85 %)
+        run: |
+          uv run coverage report --include="src/nids/core/*" --fail-under=85
+          uv run coverage report --include="src/nids/sensor/*" --fail-under=85
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: ignore

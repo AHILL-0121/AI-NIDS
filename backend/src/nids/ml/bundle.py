@@ -4,10 +4,10 @@ Two models, each answering a different question:
 
 1. A LightGBM classifier: "which known attack family does this look like?" `attack_prob` is
    1 - P(benign).
-2. An IsolationForest fitted on benign flows only: "how unusual is this compared to normal
-   traffic?" Its raw score is calibrated against benign validation flows, so `novelty` = 0.995
-   means "more unusual than 99.5% of benign flows". A novelty threshold of 0.995 therefore allows
-   about a 0.5% false-positive rate on benign traffic, by construction.
+2. A novelty model fitted on benign flows only (see `novelty.py`): "how unusual is this compared
+   to normal traffic?" Its raw score is calibrated against benign validation flows, so `novelty`
+   = 0.995 means "more unusual than 99.5% of benign flows" (strictly more: flows tied with typical
+   benign traffic score low, not high).
 
 A flow raises an alert when either score crosses its threshold (audit ML-06: one documented rule,
 scores on comparable 0-1 scales).
@@ -63,7 +63,7 @@ class DetectorBundle:
         raw = -self.novelty_model.score_samples(
             novelty_transform(features, self.novelty_features, self.novelty_fill)
         )
-        novelty = np.searchsorted(self.novelty_reference, raw, side="right") / len(
+        novelty = np.searchsorted(self.novelty_reference, raw, side="left") / len(
             self.novelty_reference
         )
 
@@ -78,6 +78,17 @@ class DetectorBundle:
             },
             index=features.index,
         )
+
+    def novelty_reasons(self, features: pd.DataFrame, top: int = 3) -> list[list[str]]:
+        """The features that made each flow most unusual (for the alert's "why flagged")."""
+        contributions = getattr(self.novelty_model, "contributions", None)
+        if contributions is None:
+            return [[] for _ in range(len(features))]
+        rarity = contributions(
+            novelty_transform(features, self.novelty_features, self.novelty_fill)
+        )
+        order = np.argsort(-rarity, axis=1)[:, :top]
+        return [[self.novelty_features[j] for j in row] for row in order]
 
     def score_one(self, features: dict[str, float]) -> dict[str, Any]:
         """Score a single flow (e.g. from features_from_flow)."""

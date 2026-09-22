@@ -68,6 +68,11 @@ class PcapReplaySource:
 
     speed="max" processes as fast as possible; "realtime" sleeps to match the original packet
     timing (for demos). Streams with PcapReader instead of loading the file (audit CAP-09).
+
+    shift_to_now moves every timestamp by one offset so the capture happens in the present: it
+    starts now at "realtime" speed, and ends now at "max" speed (which costs one extra pass over
+    the file to find the last timestamp). Used for demos, where a capture recorded years ago
+    would otherwise fall outside every "last hour" view.
     """
 
     name = "pcap"
@@ -78,16 +83,28 @@ class PcapReplaySource:
         config: FlowTableConfig | None = None,
         speed: Literal["max", "realtime"] = "max",
         observer: PacketObserver | None = None,
+        shift_to_now: bool = False,
     ) -> None:
         self.path = Path(path)
         self.config = config or FlowTableConfig()
         self.speed = speed
         self.observer = observer
+        self.shift_to_now = shift_to_now
         self._counters = _Counters()
         self._table: FlowTable | None = None
 
     def metrics(self) -> dict[str, int | float]:
         return _metrics(self._counters, self._table)
+
+    def _offset(self) -> float:
+        """Seconds to add so the file's last packet lands at the current time."""
+        from scapy.utils import PcapReader
+
+        last: float | None = None
+        with PcapReader(str(self.path)) as reader:
+            for packet in reader:
+                last = float(packet.time)
+        return 0.0 if last is None else time.time() - last
 
     def run(self, emit: FlowSink, stop: threading.Event) -> None:
         from scapy.utils import PcapReader
@@ -103,15 +120,21 @@ class PcapReplaySource:
         except Exception as exc:
             raise CaptureError(f"Can't read {self.path} as pcap/pcapng: {exc}") from exc
 
+        offset = self._offset() if self.shift_to_now and self.speed == "max" else None
         with reader:
             for packet in reader:
                 if stop.is_set():
                     break
+                original = float(packet.time)
                 if self.speed == "realtime" and previous_ts is not None:
-                    delay = float(packet.time) - previous_ts
+                    delay = original - previous_ts
                     if delay > 0 and stop.wait(delay):
                         break
-                previous_ts = float(packet.time)
+                previous_ts = original
+                if self.shift_to_now:
+                    if offset is None:  # realtime: the first packet happens now
+                        offset = time.time() - original
+                    packet.time = original + offset
 
                 ts = _feed(table, self._counters, packet, self.observer)
                 if ts is None:

@@ -1,0 +1,95 @@
+name: e2e
+
+# Both halves together: the API contract and the full-stack browser tests.
+on:
+  push:
+    branches: [main, v2]
+    paths: ["backend/**", "frontend/**", ".github/workflows/e2e.yml"]
+  pull_request:
+    paths: ["backend/**", "frontend/**", ".github/workflows/e2e.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: API client is up to date
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.30"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: uv sync --locked --all-extras
+        working-directory: backend
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Regenerate the OpenAPI schema and TypeScript types
+        run: |
+          (cd backend && uv run nids openapi --out ../frontend/openapi.json)
+          (cd frontend && npm run gen:api)
+      - name: Fail if they changed
+        run: |
+          git diff --exit-code -- frontend/openapi.json frontend/src/lib/api/schema.d.ts || {
+            echo "::error::The API changed but the frontend client wasn't regenerated. Run: cd backend && uv run nids openapi --out ../frontend/openapi.json && cd ../frontend && npm run gen:api"
+            exit 1
+          }
+
+  e2e:
+    name: Playwright (flow + axe) against the real API
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.30"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: uv sync --locked --all-extras
+        working-directory: backend
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      # The API prints report PDFs with the Chrome Headless Shell Playwright just installed; the
+      # runner's desktop Chrome hangs when printing headless.
+      - name: Point report PDFs at Chrome Headless Shell
+        run: |
+          shell=$(find ~/.cache/ms-playwright -type f -name chrome-headless-shell | head -n 1)
+          test -x "$shell"
+          echo "NIDS_PDF_BROWSER=$shell" >> "$GITHUB_ENV"
+      - name: Build the UI and run the E2E suite
+        run: npm run e2e
+        working-directory: frontend
+        env:
+          CI: "true"
+          NIDS_PDF_NO_SANDBOX: "true"  # same trade as the Docker image: our own script-free page
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
