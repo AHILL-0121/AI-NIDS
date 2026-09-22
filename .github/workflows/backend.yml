@@ -45,12 +45,19 @@ jobs:
       - name: Types
         run: uv run mypy
 
+      # The runner's desktop Chrome hangs when printing headless, so the report PDF test uses
+      # Chrome Headless Shell, the build Google ships for scripted printing and screenshots.
+      - name: Chrome Headless Shell for the report PDF test
+        run: |
+          npx --yes @puppeteer/browsers install chrome-headless-shell@stable --path "$RUNNER_TEMP/browsers"
+          shell=$(find "$RUNNER_TEMP/browsers" -type f -name chrome-headless-shell | head -n 1)
+          test -x "$shell"
+          echo "NIDS_PDF_BROWSER=$shell" >> "$GITHUB_ENV"
+
       - name: Tests (fails under 75 % coverage)
         run: uv run pytest --cov=nids --cov-report=term --cov-report=xml
         env:
-          # The report PDF test prints with the runner's Chrome, whose sandbox never starts a
-          # renderer there (the browser hangs). Same trade as the Docker image: our own page.
-          NIDS_PDF_NO_SANDBOX: "true"
+          NIDS_PDF_NO_SANDBOX: "true"  # same trade as the Docker image: our own script-free page
 
       - name: Coverage gates for core/ and sensor/ (85 %)
         run: |

@@ -72,13 +72,19 @@ jobs:
         working-directory: frontend
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
+      # The API prints report PDFs with the Chrome Headless Shell Playwright just installed; the
+      # runner's desktop Chrome hangs when printing headless.
+      - name: Point report PDFs at Chrome Headless Shell
+        run: |
+          shell=$(find ~/.cache/ms-playwright -type f -name chrome-headless-shell | head -n 1)
+          test -x "$shell"
+          echo "NIDS_PDF_BROWSER=$shell" >> "$GITHUB_ENV"
       - name: Build the UI and run the E2E suite
         run: npm run e2e
         working-directory: frontend
         env:
           CI: "true"
-          # The API prints report PDFs with the runner's Chrome, whose sandbox hangs there.
-          NIDS_PDF_NO_SANDBOX: "true"
+          NIDS_PDF_NO_SANDBOX: "true"  # same trade as the Docker image: our own script-free page
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
