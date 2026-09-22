@@ -8,11 +8,14 @@ The browser gets a throwaway profile, no network (every hostname resolves to not
 timeout. The report itself contains no scripts and its CSP blocks every external fetch.
 """
 
+import contextlib
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -90,23 +93,71 @@ def html_to_pdf(
             # running it unsandboxed is an acceptable trade.
             args.insert(1, "--no-sandbox")
         # stderr goes to a file, not a pipe: Chrome's helpers (crashpad) inherit its handles and
-        # can outlive it, and reading a pipe would wait for them too, until the timeout.
+        # can outlive it, and reading a pipe would wait for them too.
         with tempfile.TemporaryFile() as err:
             try:
-                done = subprocess.run(  # noqa: S603 - fixed executable found above, no shell
+                proc = subprocess.Popen(  # noqa: S603 - fixed executable found above, no shell
                     args,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=err,
-                    timeout=timeout_s,
-                    check=False,
+                    start_new_session=os.name == "posix",  # so the whole tree can be stopped
                 )
-            except subprocess.TimeoutExpired as exc:
-                raise PdfError(f"The browser took longer than {timeout_s:.0f} s.") from exc
             except OSError as exc:
                 raise PdfError(f"Couldn't start {browser.name}: {exc}") from exc
+            try:
+                finished = _wait_for_pdf(proc, pdf, timeout_s)
+            finally:
+                _stop(proc)
             err.seek(0)
-            stderr = err.read().decode(errors="replace")
-    if not pdf.is_file() or pdf.stat().st_size == 0:
-        detail = stderr.strip().splitlines()[-1:] or ["no output"]
-        raise PdfError(f"{browser.name} exited with {done.returncode}: {detail[0]}")
+            detail = _last_lines(err.read().decode(errors="replace"))
+    if not finished:
+        raise PdfError(f"The browser took longer than {timeout_s:.0f} s. {detail}".strip())
+    if not _is_complete_pdf(pdf):
+        raise PdfError(f"{browser.name} exited with {proc.returncode}: {detail or 'no output'}")
+
+
+def _wait_for_pdf(proc: subprocess.Popen[bytes], pdf: Path, timeout_s: float) -> bool:
+    """True once the browser has exited or written a whole PDF, False on timeout.
+
+    Headless Chrome on some Linux hosts (GitHub's Ubuntu runners among them) doesn't exit after
+    printing, so a finished file counts as done even while the process is still up.
+    """
+    deadline = time.monotonic() + timeout_s
+    last_size = -1
+    while proc.poll() is None:
+        if _is_complete_pdf(pdf):
+            size = pdf.stat().st_size
+            if size == last_size:  # unchanged across two polls: the write is over
+                return True
+            last_size = size
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.25)
+    return True
+
+
+def _is_complete_pdf(pdf: Path) -> bool:
+    try:
+        with pdf.open("rb") as f:
+            if f.read(5) != b"%PDF-":
+                return False
+            f.seek(max(0, pdf.stat().st_size - 1024))
+            return b"%%EOF" in f.read()
+    except OSError:
+        return False
+
+
+def _stop(proc: subprocess.Popen[bytes]) -> None:
+    """Kill the browser and everything it started (renderers, crashpad)."""
+    if sys.platform != "win32":
+        with contextlib.suppress(ProcessLookupError, PermissionError):  # already gone
+            os.killpg(proc.pid, signal.SIGKILL)
+    elif proc.poll() is None:
+        proc.kill()
+    proc.wait()
+
+
+def _last_lines(stderr: str, count: int = 3) -> str:
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    return " | ".join(lines[-count:])
