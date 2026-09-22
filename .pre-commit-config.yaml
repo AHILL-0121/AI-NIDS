@@ -1,0 +1,68 @@
+# Install once:  pip install pre-commit  (or: uv tool install pre-commit), then `pre-commit install`
+# Run on all files:  pre-commit run --all-files
+#
+# Backend and frontend hooks run the tools pinned in backend/uv.lock and frontend/package-lock.json,
+# so local runs, pre-commit and CI all use the same versions.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+        exclude: ^frontend/tsconfig\.json$ # allows comments
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      # --- backend/ ---
+      - id: ruff-check
+        name: ruff check (backend)
+        entry: uv run --directory backend ruff check --fix
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: ruff-format
+        name: ruff format (backend)
+        entry: uv run --directory backend ruff format
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: mypy
+        name: mypy (backend)
+        entry: uv run --directory backend mypy
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
+      # --- frontend/ ---
+      - id: prettier
+        name: prettier (frontend)
+        entry: npm --prefix frontend run -s format:check
+        language: system
+        files: ^frontend/.*\.(ts|tsx|css|json|mjs|mts)$
+        pass_filenames: false
+      - id: eslint
+        name: eslint (frontend)
+        entry: npm --prefix frontend run -s lint
+        language: system
+        files: ^frontend/.*\.(ts|tsx|mjs|mts)$
+        pass_filenames: false
+      - id: tsc
+        name: tsc (frontend)
+        entry: npm --prefix frontend run -s typecheck
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false

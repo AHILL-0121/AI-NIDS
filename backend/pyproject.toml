@@ -1,0 +1,83 @@
+[project]
+name = "nids"
+version = "2.0.0.dev0"
+description = "AI-NIDS v2: flow-based network intrusion detection with honest ML evaluation"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy>=2.0",
+    "alembic>=1.14",
+    "typer>=0.15",
+]
+
+[project.optional-dependencies]
+# Packet capture. NFStream is the Linux backend; Scapy is the cross-platform fallback.
+capture = [
+    "scapy>=2.6",
+    "nfstream>=6.5; sys_platform == 'linux'",
+]
+# Offline training and evaluation.
+ml = [
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "scikit-learn>=1.5",
+    "lightgbm>=4.5",
+    "shap>=0.46",
+]
+
+[project.scripts]
+nids = "nids.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.120",
+    "httpx>=0.28",
+    "scapy>=2.6",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nids"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = ["S101"]  # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S603"]  # tests run fixed commands, e.g. the CLI in a fresh interpreter
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["nids"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+module = ["nids.core.*", "nids.sensor.flows", "nids.sensor.packets"]
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["scapy.*", "nfstream.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
