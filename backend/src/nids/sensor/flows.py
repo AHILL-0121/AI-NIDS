@@ -229,10 +229,12 @@ class FlowTable:
         self,
         on_flow: Callable[[FlowRecord], None],
         config: FlowTableConfig | None = None,
+        on_new_flow: Callable[[PacketMeta, str], None] | None = None,
     ) -> None:
         self.config = config or FlowTableConfig()
         self.stats = FlowTableStats()
         self._on_flow = on_flow
+        self._on_new_flow = on_new_flow  # sees each flow's first packet (scan detection)
         self._flows: OrderedDict[FlowKey, _Flow] = OrderedDict()  # least recently active first
         self._ids = itertools.count(1)
 
@@ -263,6 +265,8 @@ class FlowTable:
             self._flows[key] = flow
             self.stats.flows_created += 1
             flow.add(pkt, first=True)
+            if self._on_new_flow is not None:
+                self._on_new_flow(pkt, flow.flow_id)
         else:
             self._flows.move_to_end(key)
             flow.add(pkt, first=False)

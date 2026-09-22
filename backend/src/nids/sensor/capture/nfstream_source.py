@@ -12,6 +12,7 @@ from typing import Any
 
 from nids.core.schemas.flow import DirectionStats, EndReason, FlowRecord
 from nids.sensor.capture.base import CaptureError, FlowSink
+from nids.sensor.detect.base import PacketObserver
 from nids.sensor.flows import FlowTableConfig
 
 log = logging.getLogger(__name__)
@@ -89,8 +90,10 @@ class NfstreamSource:
         source: str | Path,
         config: FlowTableConfig | None = None,
         bpf_filter: str | None = None,
+        observer: PacketObserver | None = None,
     ) -> None:
         self.source = str(source)
+        self.observer = observer
         self.config = config or FlowTableConfig()
         self.bpf_filter = bpf_filter
         self._flows = 0
@@ -118,10 +121,15 @@ class NfstreamSource:
                 n_dissections=20,
             )
             for flow in streamer:
-                emit(flow_from_nfstream(flow))
+                record = flow_from_nfstream(flow)
+                emit(record)
                 self._flows += 1
+                if self.observer is not None:
+                    self.observer.tick(record.last_seen)
                 if stop.is_set():
                     break
+            if self.observer is not None:
+                self.observer.flush()
         except CaptureError:
             raise
         except Exception as exc:

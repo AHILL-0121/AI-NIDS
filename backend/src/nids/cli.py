@@ -16,7 +16,10 @@ from nids.core.logging import configure_logging
 from nids.core.settings import get_settings
 
 if TYPE_CHECKING:
+    from nids.core.schemas.alert import Alert
+    from nids.core.schemas.flow import FlowRecord
     from nids.sensor.capture import FlowSource
+    from nids.sensor.detect import DetectionEngine
 
 app = typer.Typer(help="AI-NIDS v2 command line.", no_args_is_help=True)
 
@@ -24,7 +27,9 @@ IdleOpt = Annotated[float, typer.Option(help="Seconds without packets before a f
 ActiveOpt = Annotated[float, typer.Option(help="Maximum flow length in seconds before splitting.")]
 OutOpt = Annotated[
     str,
-    typer.Option("--out", "-o", help="Write flows as JSON Lines to this file, or '-' for stdout."),
+    typer.Option(
+        "--out", "-o", help="Write flows as JSON Lines to this file, '-' for stdout, or 'none'."
+    ),
 ]
 
 
@@ -85,21 +90,53 @@ def interfaces(json_output: Annotated[bool, typer.Option("--json")] = False) -> 
         typer.echo(f'{"":<28} --interface "{i.name}"')
 
 
-def _open_out(path: str) -> "nullcontext[IO[str]] | IO[str]":
+def _open_out(path: str) -> "nullcontext[IO[str] | None] | IO[str]":
+    if path == "none":
+        return nullcontext(None)
     if path == "-":
         return nullcontext(sys.stdout)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     return open(path, "w", encoding="utf-8")
 
 
-def _run(source: "FlowSource", out: str) -> None:
+def _build_engine(model: Path | None) -> "tuple[DetectionEngine, dict[str, Alert]]":
+    """Detection engine that prints each new alert to stderr and keeps the latest state of all."""
+    from nids.sensor.detect import DetectionEngine
+
+    alerts: dict[str, Alert] = {}
+
+    def on_alert(alert: "Alert", is_new: bool) -> None:
+        alerts[alert.id] = alert
+        if is_new:
+            where = f"{alert.src or '*'} -> {alert.dst or '*'}"
+            typer.echo(f"[{alert.severity.value.upper():8}] {alert.title}: {where}", err=True)
+
+    engine = DetectionEngine(on_alert)
+    if model is not None:
+        engine.load_model(model)
+    return engine, alerts
+
+
+def _run(
+    source: "FlowSource",
+    out: str,
+    engine: "DetectionEngine",
+    alerts: "dict[str, Alert]",
+    alerts_out: Path | None,
+) -> None:
     """Run a flow source to completion (or Ctrl+C), then print a summary to stderr."""
     from nids.sensor.capture import CaptureError
     from nids.sensor.runner import JsonlSink, run_in_background
 
     started = time.monotonic()
     with _open_out(out) as stream:
-        sink = JsonlSink(stream)
+        jsonl = JsonlSink(stream) if stream is not None else None
+
+        def sink(flow: "FlowRecord") -> None:
+            if jsonl is not None:
+                jsonl(flow)
+            engine.on_flow(flow)
+
         thread, stop, errors = run_in_background(source, sink)
         try:
             while thread.is_alive():
@@ -114,41 +151,67 @@ def _run(source: "FlowSource", out: str) -> None:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(code=1)
         raise exc
+    if alerts_out is not None:
+        alerts_out.parent.mkdir(parents=True, exist_ok=True)
+        alerts_out.write_text(
+            "".join(json.dumps(a.to_dict()) + "\n" for a in alerts.values()), encoding="utf-8"
+        )
     elapsed = time.monotonic() - started
-    metrics = source.metrics()
-    typer.echo(f"\n{sink.count} flows in {elapsed:.1f} s", err=True)
-    typer.echo(json.dumps(metrics, indent=2), err=True)
+    summary = {
+        "flows": source.metrics().get("flows_created"),
+        "alerts": len(alerts),
+        "alerts_by_type": dict(engine.detections),
+        "suppressed": dict(engine.correlator.suppressed),
+        "capture": source.metrics(),
+    }
+    typer.echo(f"\nDone in {elapsed:.1f} s", err=True)
+    typer.echo(json.dumps(summary, indent=2), err=True)
+
+
+AlertsOpt = Annotated[
+    Path | None, typer.Option("--alerts", help="Write the final alerts as JSON Lines here.")
+]
+ModelOpt = Annotated[
+    Path | None,
+    typer.Option(exists=True, file_okay=False, help="Model artifact directory (from nids train)."),
+]
 
 
 @app.command()
 def replay(
     pcap: Annotated[Path, typer.Argument(exists=True, dir_okay=False, help="pcap or pcapng file.")],
     out: OutOpt = "-",
+    alerts: AlertsOpt = None,
+    model: ModelOpt = None,
     speed: Annotated[str, typer.Option(help="max or realtime.")] = "max",
     backend: Annotated[str, typer.Option(help="scapy (any OS) or nfstream (Linux).")] = "scapy",
     idle_timeout: IdleOpt = 120.0,
     active_timeout: ActiveOpt = 120.0,
 ) -> None:
-    """Stream a PCAP file through the flow pipeline and write the flows."""
+    """Stream a PCAP file through flow assembly and detection."""
     from nids.sensor.flows import FlowTableConfig
     from nids.sensor.runner import build_replay_source
 
     if speed not in ("max", "realtime") or backend not in ("scapy", "nfstream"):
         raise typer.BadParameter("speed must be max|realtime and backend scapy|nfstream")
+    engine, found = _build_engine(model)
     config = FlowTableConfig(idle_timeout=idle_timeout, active_timeout=active_timeout)
     source = build_replay_source(
         pcap,
         backend=cast(Literal["nfstream", "scapy"], backend),
         config=config,
         speed=cast(Literal["max", "realtime"], speed),
+        observer=engine,
     )
-    _run(source, out)
+    _run(source, out, engine, found, alerts)
 
 
 @app.command()
 def sensor(
     interface: Annotated[str, typer.Option("--interface", "-i", help="See `nids interfaces`.")],
-    out: OutOpt = "-",
+    out: OutOpt = "none",
+    alerts: AlertsOpt = None,
+    model: ModelOpt = None,
     backend: Annotated[str, typer.Option(help="auto, nfstream or scapy.")] = "auto",
     bpf_filter: Annotated[
         str | None, typer.Option("--filter", help="BPF filter, e.g. 'tcp'.")
@@ -156,7 +219,7 @@ def sensor(
     idle_timeout: IdleOpt = 120.0,
     active_timeout: ActiveOpt = 120.0,
 ) -> None:
-    """Capture live traffic (needs capture privileges). Stop with Ctrl+C."""
+    """Capture live traffic and detect attacks (needs capture privileges). Stop with Ctrl+C."""
     from nids.sensor.capability import check_capture
     from nids.sensor.flows import FlowTableConfig
     from nids.sensor.runner import build_live_source
@@ -169,12 +232,17 @@ def sensor(
         raise typer.Exit(code=1)
     if backend not in ("auto", "nfstream", "scapy"):
         raise typer.BadParameter("backend must be auto|nfstream|scapy")
+    engine, found = _build_engine(model)
     config = FlowTableConfig(idle_timeout=idle_timeout, active_timeout=active_timeout)
     source = build_live_source(
-        interface, cast(Literal["auto", "nfstream", "scapy"], backend), config, bpf_filter
+        interface,
+        cast(Literal["auto", "nfstream", "scapy"], backend),
+        config,
+        bpf_filter,
+        observer=engine,
     )
     typer.echo(f"Capturing on {interface} with {source.name}. Ctrl+C to stop.", err=True)
-    _run(source, out)
+    _run(source, out, engine, found, alerts)
 
 
 data_app = typer.Typer(help="Prepare training datasets.", no_args_is_help=True)
