@@ -1429,6 +1429,8 @@ export interface components {
             session_id: string | null;
             /** Started At */
             started_at: number | null;
+            /** Managed */
+            managed: boolean;
             /** Model Version */
             model_version: string | null;
         };

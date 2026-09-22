@@ -120,6 +120,7 @@ function Shell({ children }: { children: ReactNode }) {
           </NextLink>
           <SensorStatus
             running={running}
+            managed={sensor.data?.managed ?? true}
             iface={sensor.data?.interface ?? null}
             startedAt={sensor.data?.started_at ?? null}
             onStart={() => setStartOpen(true)}
@@ -231,6 +232,7 @@ function useNow(active: boolean): number {
 
 function SensorStatus({
   running,
+  managed,
   iface,
   startedAt,
   onStart,
@@ -238,6 +240,7 @@ function SensorStatus({
   stopping,
 }: {
   running: boolean;
+  managed: boolean;
   iface: string | null;
   startedAt: number | null;
   onStart: () => void;
@@ -255,28 +258,34 @@ function SensorStatus({
           {startedAt && (
             <span className="font-mono text-ink-subtle tabular-nums">{clock(now - startedAt)}</span>
           )}
-          <Button
-            size="dense"
-            variant="ghost"
-            onPress={onStop}
-            loading={stopping}
-            icon={<StopIcon size={12} weight="fill" aria-hidden />}
-          >
-            Stop
-          </Button>
+          {managed && (
+            <Button
+              size="dense"
+              variant="ghost"
+              onPress={onStop}
+              loading={stopping}
+              icon={<StopIcon size={12} weight="fill" aria-hidden />}
+            >
+              Stop
+            </Button>
+          )}
         </>
       ) : (
         <>
           <Dot tone="off" />
-          <span className="text-ink-muted">Not capturing</span>
-          <Button
-            size="dense"
-            variant="ghost"
-            onPress={onStart}
-            icon={<PlayIcon size={12} weight="fill" aria-hidden />}
-          >
-            Start
-          </Button>
+          <span className="text-ink-muted">
+            {managed ? "Not capturing" : "Sensor service not running"}
+          </span>
+          {managed && (
+            <Button
+              size="dense"
+              variant="ghost"
+              onPress={onStart}
+              icon={<PlayIcon size={12} weight="fill" aria-hidden />}
+            >
+              Start
+            </Button>
+          )}
         </>
       )}
     </div>

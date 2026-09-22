@@ -252,3 +252,16 @@ def test_pipeline_keeps_a_bounded_number_of_alerts_in_memory(db: Database) -> No
         )
 
     assert list(pipeline.alerts) == ["A-7", "A-8", "A-9"] and pipeline.alerts_raised == 10
+
+
+def test_sensor_check_follows_the_heartbeat(db: Database) -> None:
+    """The Docker health check for the sensor service."""
+    runner = CliRunner()
+    assert runner.invoke(cli, ["sensor-check"]).exit_code == 1
+
+    repo.write_heartbeat(db, "abc", "eth0", 1)
+    alive = runner.invoke(cli, ["sensor-check"])
+    repo.clear_heartbeat(db)
+
+    assert alive.exit_code == 0 and "eth0" in alive.output
+    assert runner.invoke(cli, ["sensor-check"]).exit_code == 1

@@ -4,6 +4,7 @@ Plain subcommands only, with no interactive menus (audit OPS-05).
 """
 
 import json
+import os
 import sys
 import time
 from contextlib import nullcontext
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from nids.sensor.detect.base import PacketObserver
 
 app = typer.Typer(help="AI-NIDS v2 command line.", no_args_is_help=True)
+HEARTBEAT_EVERY_S = 10.0
 
 IdleOpt = Annotated[float, typer.Option(help="Seconds without packets before a flow ends.")]
 ActiveOpt = Annotated[float, typer.Option(help="Maximum flow length in seconds before splitting.")]
@@ -47,6 +49,14 @@ def api() -> None:
     import uvicorn
 
     settings = get_settings()
+    if settings.host not in ("127.0.0.1", "::1", "localhost"):
+        # Opt-in (audit SEC-01). In the Docker image the container listens on all of its own
+        # interfaces, and compose publishes the port on the host's loopback only.
+        typer.echo(
+            f"Warning: listening on {settings.host}:{settings.port}. Anyone who can reach this "
+            "address gets the login page; keep it behind a firewall or on loopback.",
+            err=True,
+        )
     uvicorn.run(
         "nids.api.app:create_app",
         factory=True,
@@ -117,7 +127,15 @@ def _graceful_signals() -> None:
     stop request flushes open flows and closes the session instead of killing the process."""
     import signal
 
-    def interrupt(_signum: int, _frame: object) -> None:
+    main_pid = os.getpid()
+
+    def interrupt(signum: int, _frame: object) -> None:
+        if os.getpid() != main_pid:
+            # A worker forked by the capture library (NFStream) inherited this handler: let it
+            # end the default way instead of printing a KeyboardInterrupt traceback.
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+            return
         raise KeyboardInterrupt
 
     for name in ("SIGTERM", "SIGBREAK"):
@@ -186,8 +204,14 @@ def _run(
 
         _graceful_signals()
         thread, stop, errors = run_in_background(source, pipeline.on_flow)
+        beat = db is not None and kind == "live" and pipeline.session_id is not None
+        last_beat = 0.0
         try:
             while thread.is_alive():
+                if beat and time.monotonic() - last_beat >= HEARTBEAT_EVERY_S:
+                    assert db is not None and pipeline.session_id is not None
+                    repo.write_heartbeat(db, pipeline.session_id, label, os.getpid())
+                    last_beat = time.monotonic()
                 thread.join(timeout=0.5)
         except KeyboardInterrupt:
             typer.echo("\nStopping... (flushing open flows)", err=True)
@@ -198,6 +222,8 @@ def _run(
 
     if db is not None and pipeline.session_id is not None:
         repo.finish_session(db, pipeline.session_id, source.metrics(), error)
+        if beat:
+            repo.clear_heartbeat(db)
     for exc in errors:
         if isinstance(exc, CaptureError):
             typer.echo(f"Error: {exc}", err=True)
@@ -290,6 +316,13 @@ def sensor(
     ] = None,
     idle_timeout: IdleOpt = 120.0,
     active_timeout: ActiveOpt = 120.0,
+    active_model: Annotated[
+        bool,
+        typer.Option(
+            "--active-model",
+            help="Use the model activated in the UI (for a sensor that runs as its own service).",
+        ),
+    ] = False,
 ) -> None:
     """Capture live traffic, detect attacks and store results. Stop with Ctrl+C."""
     from nids.sensor.capability import check_capture
@@ -315,12 +348,51 @@ def sensor(
             observer=observer,
         )
 
+    if active_model and model is None:
+        model = _active_model_path()
     typer.echo(f"Capturing on {interface}. Ctrl+C to stop.", err=True)
     _run(factory, kind="live", label=interface, out=out, alerts_out=alerts, model=model, use_db=db)
 
 
 db_app = typer.Typer(help="Database maintenance.", no_args_is_help=True)
 app.add_typer(db_app, name="db")
+
+
+def _active_model_path() -> Path | None:
+    """The verified artifact of the model activated in the UI, or None (rules only)."""
+    from nids.api.errors import ApiError
+    from nids.api.models import active_version, model_path
+    from nids.store.db import Database
+
+    settings = get_settings()
+    database = Database(settings.database_url)
+    version = active_version(database)
+    if version is None:
+        typer.echo("No model is active: detecting with rules only.", err=True)
+        return None
+    try:
+        return model_path(database, settings, version)
+    except ApiError as exc:
+        typer.echo(f"Error: active model {version} can't be used: {exc.message}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+@app.command("sensor-check")
+def sensor_check(
+    max_age: Annotated[float, typer.Option(help="Seconds since the last heartbeat.")] = 45.0,
+) -> None:
+    """Exit 0 if a live sensor wrote its heartbeat recently (container health check)."""
+    from nids.store import repo
+    from nids.store.db import Database
+    from nids.store.models import utcnow
+
+    # Read only: a health check must never run migrations.
+    beat = repo.read_heartbeat(Database(get_settings().database_url, migrate=False))
+    age = utcnow() - float(beat["ts"]) if beat else None
+    if age is None or age > max_age:
+        typer.echo("No recent sensor heartbeat.", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"Sensor alive on {beat['interface'] if beat else '?'} ({age:.0f} s ago)")
 
 
 @db_app.command("upgrade")
@@ -521,7 +593,12 @@ def report(
     settings = get_settings()
     try:
         result = write_report(
-            Database(settings.database_url), session_id, out, pdf=pdf, browser=settings.pdf_browser
+            Database(settings.database_url),
+            session_id,
+            out,
+            pdf=pdf,
+            browser=settings.pdf_browser,
+            no_sandbox=settings.pdf_no_sandbox,
         )
     except ReportError as exc:
         typer.echo(f"Error: {exc}", err=True)

@@ -3953,6 +3953,10 @@
             ],
             "title": "Started At"
           },
+          "managed": {
+            "type": "boolean",
+            "title": "Managed"
+          },
           "model_version": {
             "anyOf": [
               {
@@ -3973,6 +3977,7 @@
           "interface",
           "session_id",
           "started_at",
+          "managed",
           "model_version"
         ],
         "title": "SensorState"

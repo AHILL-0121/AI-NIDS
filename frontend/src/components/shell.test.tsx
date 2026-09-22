@@ -89,6 +89,13 @@ describe("app shell", () => {
     expect(stop.mutate).toHaveBeenCalled();
   });
 
+  it("hides start/stop when the sensor is its own service (Docker)", () => {
+    sensor.data = { running: false, managed: false, interface: null, started_at: null };
+    shell();
+    expect(screen.getByText("Sensor service not running")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+  });
+
   it("signs out from the account menu", async () => {
     shell();
     await userEvent.click(screen.getByRole("button", { name: "Account" }));

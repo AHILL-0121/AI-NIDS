@@ -77,3 +77,56 @@ Configuration comes from `NIDS_*` environment variables or `backend/.env`. See `
   `uv sync --extra capture` for the faster NFStream backend.
 
 PCAP replay needs none of this.
+
+## Running on Windows
+
+1. Install [Npcap](https://npcap.com) and tick **"Install Npcap in WinPcap API-compatible Mode"**.
+   Whether you tick "Restrict Npcap driver's access to Administrators only" decides step 3.
+2. Check it from a normal PowerShell in `backend\`:
+
+   ```powershell
+   uv sync --extra capture --extra ml
+   uv run nids doctor          # every line should say OK (a WARN about privileges is fine for now)
+   uv run nids interfaces      # copy the --interface value of the adapter you want to watch
+   ```
+
+3. Start the services. Run both from `backend\` so they share `data\nids.db`.
+
+   **Npcap not restricted to Administrators (the default).** One unelevated process is enough.
+   The API starts and stops the sensor itself when you press Start in the UI:
+
+   ```powershell
+   uv run nids api             # http://127.0.0.1:8000
+   ```
+
+   **Npcap restricted to Administrators.** Only the sensor gets elevation. Run the API and the UI
+   unelevated, and tell the API that the sensor runs on its own:
+
+   ```powershell
+   # PowerShell #1, unelevated
+   $env:NIDS_EXTERNAL_SENSOR = "true"; uv run nids api
+
+   # PowerShell #2, "Run as administrator", in the same backend\ folder
+   uv run nids sensor -i "<interface>" --active-model
+   ```
+
+   The UI then shows the sensor from its heartbeat and hides its Start/Stop buttons. Stop the
+   sensor with Ctrl+C, which flushes open flows and closes the session.
+
+4. For UI development, run `npm run dev` in `frontend\` (unelevated). It proxies `/api` to port 8000.
+
+Docker Desktop can't capture the host's traffic on Windows (its "host" network is a VM), so use
+the steps above for live capture. The container is still fine for replays and the UI.
+
+## Docker (Linux)
+
+One image runs both services: `api` (unprivileged, serves the UI) and `sensor` (only it gets
+`NET_RAW`/`NET_ADMIN`, through a dedicated `python-capture` binary). From the repo root:
+
+```bash
+docker compose -f docker/compose.yml up -d --build                    # UI + API on 127.0.0.1:8000
+NIDS_INTERFACE=eth0 docker compose -f docker/compose.yml --profile capture up -d   # + live capture
+```
+
+Data (database, uploads, reports, models) lives in the `nids-data` volume. Build with
+`NIDS_WITH_PDF=0` to leave Chromium out of the image. Reports are then HTML only.

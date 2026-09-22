@@ -4,3 +4,6 @@ out
 package-lock.json
 openapi.json
 src/lib/api/schema.d.ts
+coverage
+playwright-report
+test-results

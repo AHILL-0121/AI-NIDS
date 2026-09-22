@@ -26,7 +26,7 @@ from nids.api.errors import ApiError
 from nids.core.settings import Settings
 from nids.store.db import Database
 from nids.store.models import CaptureSession, Job, Upload, utcnow
-from nids.store.repo import audit
+from nids.store.repo import audit, read_heartbeat
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ DATASETS = ("cicids2017", "unsw-nb15")
 _WINDOWS = sys.platform == "win32"
 _MODEL_SAVED = re.compile(r"Saved model to (\S+)")
 _SESSION = re.compile(r'"session": "([0-9a-f]+)"')
+HEARTBEAT_STALE_S = 45  # the sensor beats every 10 s
 _REPORT = re.compile(r"^Report written: (\{.*\})\s*$", re.M)
 
 
@@ -46,6 +47,7 @@ class SensorStatus:
     interface: str | None
     session_id: str | None
     started_at: float | None
+    managed: bool = True  # False: an external sensor (Docker service); the API can't start/stop it
 
 
 class Supervisor:
@@ -68,7 +70,10 @@ class Supervisor:
             for job in s.query(Job).filter(Job.status.in_(("queued", "running"))):
                 job.status, job.finished_at = "failed", utcnow()
                 job.result = {**job.result, "error": "interrupted: the API restarted"}
-            for session in s.query(CaptureSession).filter(CaptureSession.status == "running"):
+            running = s.query(CaptureSession).filter(CaptureSession.status == "running")
+            if self.settings.external_sensor:  # its live session belongs to the sensor service
+                running = running.filter(CaptureSession.kind != "live")
+            for session in running:
                 session.status, session.stopped_at = "failed", utcnow()
                 session.error = "interrupted: the API restarted"
 
@@ -254,7 +259,26 @@ class Supervisor:
             result["error"] = errors[-1].removeprefix("Error:").strip()
         return result
 
+    def _external_status(self) -> SensorStatus:
+        beat = read_heartbeat(self.db)
+        if not beat or utcnow() - float(beat.get("ts", 0)) > HEARTBEAT_STALE_S:
+            return SensorStatus(False, None, None, None, None, None, managed=False)
+        with self.db.session() as s:
+            session = s.get(CaptureSession, beat.get("session_id"))
+            started = session.started_at if session else None
+        return SensorStatus(
+            running=True,
+            job_id=None,
+            pid=beat.get("pid"),
+            interface=beat.get("interface"),
+            session_id=beat.get("session_id"),
+            started_at=started,
+            managed=False,
+        )
+
     def sensor_status(self) -> SensorStatus:
+        if self.settings.external_sensor:
+            return self._external_status()
         self._reap()
         for job_id, proc in self._procs.items():
             if proc.poll() is None and self._kind(job_id) == "sensor":

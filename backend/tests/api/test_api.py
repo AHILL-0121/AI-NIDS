@@ -507,3 +507,52 @@ def test_api_restart_marks_orphaned_work_as_interrupted(isolated_database: str) 
     with db.session() as s:
         row = s.get(CaptureSession, session_id)
     assert row is not None and row.status == "failed" and "restarted" in (row.error or "")
+
+
+def test_external_sensor_is_reported_from_its_heartbeat(isolated_database: str) -> None:
+    """Docker runs the sensor as its own service: the API shows it, but doesn't manage it."""
+    from nids.store import repo
+    from nids.store.db import Database
+    from nids.store.models import CaptureSession
+
+    db = Database(isolated_database)
+    live = repo.start_session(db, "live", "eth0", "scapy")
+    with make_client(external_sensor=True) as client:  # startup must not fail the live session
+        token = sign_in(client)
+        idle = client.get("/api/sensor/status").json()
+        repo.write_heartbeat(db, live, "eth0", 4242)
+        running = client.get("/api/sensor/status").json()
+        start = client.post("/api/sensor/start", json={"interface": "eth0"}, headers=csrf(token))
+        stop = client.post("/api/sensor/stop", headers=csrf(token))
+
+    assert idle["running"] is False and idle["managed"] is False
+    assert running["running"] is True and running["session_id"] == live
+    assert running["interface"] == "eth0" and running["pid"] == 4242
+    assert start.status_code == stop.status_code == 409
+    assert start.json()["error"]["code"] == "external_sensor"
+    with db.session() as s:
+        session = s.get(CaptureSession, live)
+        assert session is not None and session.status == "running"
+
+
+def test_stale_heartbeat_means_the_sensor_is_down(isolated_database: str) -> None:
+    from nids.api.supervisor import HEARTBEAT_STALE_S
+    from nids.store import repo
+    from nids.store.db import Database
+    from nids.store.models import utcnow
+
+    db = Database(isolated_database)
+    with db.session() as s:
+        repo.set_setting(
+            s,
+            repo.HEARTBEAT_KEY,
+            {
+                "session_id": "x",
+                "interface": "eth0",
+                "pid": 1,
+                "ts": utcnow() - HEARTBEAT_STALE_S - 5,
+            },
+        )
+    with make_client(external_sensor=True) as client:
+        sign_in(client)
+        assert client.get("/api/sensor/status").json()["running"] is False

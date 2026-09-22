@@ -59,7 +59,9 @@ def find_browser(configured: str | None = None) -> Path | None:
     return next((c for c in candidates if c.is_file()), None)
 
 
-def html_to_pdf(html: Path, pdf: Path, browser: Path, timeout_s: float = 90) -> None:
+def html_to_pdf(
+    html: Path, pdf: Path, browser: Path, timeout_s: float = 90, no_sandbox: bool = False
+) -> None:
     """Print `html` to `pdf`. Raises PdfError with a readable reason on failure."""
     pdf.unlink(missing_ok=True)
     with tempfile.TemporaryDirectory(prefix="nids-pdf-") as profile:
@@ -78,9 +80,10 @@ def html_to_pdf(html: Path, pdf: Path, browser: Path, timeout_s: float = 90) -> 
             f"--print-to-pdf={pdf.resolve()}",
             html.resolve().as_uri(),
         ]
-        if sys.platform == "linux" and os.geteuid() == 0:
-            # Chromium refuses to run as root with its sandbox (typical in containers). The page
-            # is our own script-free HTML, so running it unsandboxed is an acceptable trade.
+        if no_sandbox or (sys.platform == "linux" and os.geteuid() == 0):
+            # Chromium refuses to run as root with its sandbox, and containers usually lack the
+            # user namespaces it needs. The page is our own script-free HTML with no network, so
+            # running it unsandboxed is an acceptable trade.
             args.insert(1, "--no-sandbox")
         try:
             done = subprocess.run(  # noqa: S603 - fixed executable found above, no shell

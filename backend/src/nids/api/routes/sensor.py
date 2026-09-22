@@ -43,12 +43,23 @@ class SensorState(BaseModel):
     interface: str | None
     session_id: str | None
     started_at: float | None
+    managed: bool  # False when the sensor is its own service (Docker): no start/stop from here
     model_version: str | None
 
 
 class StartSensor(BaseModel):
     interface: str = Field(min_length=1, max_length=256)
     backend: Literal["auto", "scapy", "nfstream"] = "auto"
+
+
+def _managed_here(request: Request) -> None:
+    if request.app.state.settings.external_sensor:
+        raise ApiError(
+            409,
+            "The sensor runs as its own service here. Start or stop it with "
+            "`docker compose --profile capture up -d sensor` / `docker compose stop sensor`.",
+            code="external_sensor",
+        )
 
 
 def _state(request: Request, db: Database) -> SensorState:
@@ -71,6 +82,7 @@ def start(
     db: Database = Depends(get_db),
 ) -> SensorState:
     """Start capturing on an interface, with the active model (if any)."""
+    _managed_here(request)
     report = check_capture()
     if not report.ok:
         problems = [c.model_dump() for c in report.checks if c.status == "error"]
@@ -96,6 +108,7 @@ def stop(
     request: Request, principal: Principal = Depends(require_user), db: Database = Depends(get_db)
 ) -> SensorState:
     """Stop capturing. Open flows are flushed and the session is closed before the sensor exits."""
+    _managed_here(request)
     supervisor = request.app.state.supervisor
     current = supervisor.sensor_status()
     if not current.running or current.job_id is None:

@@ -107,6 +107,33 @@ class Pseudonymizer:
         return value
 
 
+# --- sensor heartbeat ----------------------------------------------------------------------------
+
+HEARTBEAT_KEY = "sensor.heartbeat"
+
+
+def write_heartbeat(db: Database, session_id: str, interface: str, pid: int) -> None:
+    """A live sensor says it's alive (every few seconds), so an API that didn't start it can
+    still show it (Docker runs the sensor as its own container)."""
+    with db.session() as s:
+        set_setting(
+            s,
+            HEARTBEAT_KEY,
+            {"session_id": session_id, "interface": interface, "pid": pid, "ts": utcnow()},
+        )
+
+
+def read_heartbeat(db: Database) -> dict[str, Any] | None:
+    with db.session() as s:
+        value = get_setting(s, HEARTBEAT_KEY)
+    return value if isinstance(value, dict) else None
+
+
+def clear_heartbeat(db: Database) -> None:
+    with db.session() as s:
+        set_setting(s, HEARTBEAT_KEY, None)
+
+
 # --- sessions (audit CAP-08) -------------------------------------------------------------------
 
 

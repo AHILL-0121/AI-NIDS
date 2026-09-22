@@ -482,7 +482,12 @@ def render(data: ReportData) -> str:
 
 
 def write_report(
-    db: Database, session_id: str, out: Path, pdf: bool = True, browser: str | None = None
+    db: Database,
+    session_id: str,
+    out: Path,
+    pdf: bool = True,
+    browser: str | None = None,
+    no_sandbox: bool = False,
 ) -> dict[str, Any]:
     """Write `<out>.html` and, if asked and possible, `<out>.pdf`. Returns what was written."""
     html = render(collect(db, session_id))
@@ -498,7 +503,7 @@ def write_report(
             )
         else:
             try:
-                html_to_pdf(html_path, out.with_suffix(".pdf"), found)
+                html_to_pdf(html_path, out.with_suffix(".pdf"), found, no_sandbox=no_sandbox)
                 result["pdf"] = True
             except PdfError as exc:
                 result["pdf_error"] = str(exc)

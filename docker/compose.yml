@@ -1,0 +1,82 @@
+# AI-NIDS with Docker Compose (Linux hosts).
+#
+#   docker compose -f docker/compose.yml up -d --build          # API + UI on http://127.0.0.1:8000
+#   NIDS_INTERFACE=eth0 docker compose -f docker/compose.yml --profile capture up -d
+#                                                                # + live capture on eth0
+#
+# `api` is unprivileged and publishes its port on the host's loopback only. `sensor` needs the
+# host's network and raw-socket rights, so it is opt-in (the `capture` profile) and gets exactly
+# NET_RAW and NET_ADMIN. Both run as the same unprivileged user and share the `nids-data` volume
+# (SQLite database, uploads, reports, models).
+#
+# Docker Desktop on Windows/macOS can't capture the host's traffic (its "host" network is a VM).
+# Use the api service there for replays and the UI, and run `nids sensor` natively (README).
+
+name: ai-nids
+
+x-image: &image
+  image: ${NIDS_IMAGE:-ai-nids:local}
+  build:
+    context: ../backend
+    dockerfile: Dockerfile
+    additional_contexts:
+      frontend: ../frontend
+    args:
+      WITH_PDF: ${NIDS_WITH_PDF:-1}
+
+services:
+  api:
+    <<: *image
+    command: ["api"]
+    ports:
+      - "127.0.0.1:${NIDS_PORT:-8000}:8000"
+    environment:
+      NIDS_EXTERNAL_SENSOR: "true" # the sensor service below, not a child of the API
+      NIDS_SECURE_COOKIES: ${NIDS_SECURE_COOKIES:-false}
+    volumes:
+      - nids-data:/data
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=4)",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  sensor:
+    <<: *image
+    profiles: ["capture"]
+    entrypoint: ["/app/.venv/bin/python-capture", "-m", "nids.cli"]
+    command:
+      ["sensor", "--interface", "${NIDS_INTERFACE:-eth0}", "--backend", "auto", "--active-model"]
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_RAW, NET_ADMIN]
+    read_only: true
+    tmpfs: ["/tmp"]
+    volumes:
+      - nids-data:/data
+    depends_on:
+      api:
+        condition: service_healthy # the API creates and migrates the database first
+    restart: unless-stopped
+    stop_grace_period: 30s # time to flush open flows and close the session
+    healthcheck:
+      test: ["CMD", "nids", "sensor-check"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  nids-data:

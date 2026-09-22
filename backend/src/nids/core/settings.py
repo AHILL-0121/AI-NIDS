@@ -41,10 +41,16 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = []  # extra browser origins for the WebSocket (dev servers)
     upload_max_mb: int = Field(default=512, gt=0, le=10_240)
     max_concurrent_jobs: int = Field(default=2, ge=1, le=8)
+    # The sensor runs as its own long-lived process (the Docker `sensor` service) instead of a
+    # child of the API. The API then reports on it from its heartbeat and never starts or stops it.
+    external_sensor: bool = False
 
     # Reports (Phase 8): PDFs are printed by a headless Chromium-based browser (Edge, Chrome,
     # Chromium). Found automatically when unset; without one, reports are HTML only.
     pdf_browser: str | None = None
+    # Chromium's sandbox needs user namespaces, which containers usually don't allow. The report
+    # page is our own script-free HTML, so the Docker image turns the sandbox off.
+    pdf_no_sandbox: bool = False
 
 
 @lru_cache
