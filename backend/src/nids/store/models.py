@@ -187,3 +187,54 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(256))
     created_at: Mapped[float] = mapped_column(Float, default=utcnow)
     last_login_at: Mapped[float | None] = mapped_column(Float)
+
+
+class AuthSession(Base):
+    """Server-side login session. The cookie holds a random token; only its SHA-256 is stored,
+    so a database leak doesn't hand out valid sessions."""
+
+    __tablename__ = "auth_sessions"
+    __table_args__ = (Index(None, "expires_at"),)
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    csrf_token: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[float] = mapped_column(Float, default=utcnow)
+    expires_at: Mapped[float] = mapped_column(Float)
+    last_seen_at: Mapped[float] = mapped_column(Float, default=utcnow)
+    client: Mapped[str] = mapped_column(String(256), default="")
+
+
+class Upload(Base):
+    """A PCAP uploaded through the API, stored under data/uploads/<id> (never a client path)."""
+
+    __tablename__ = "uploads"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(256))  # original name, for display only
+    size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    format: Mapped[str] = mapped_column(String(16))  # pcap | pcapng
+    created_at: Mapped[float] = mapped_column(Float, default=utcnow)
+
+
+class Job(Base):
+    """Background work run as a `nids` subprocess: replay, train, prepare (audit API-05)."""
+
+    __tablename__ = "jobs"
+    __table_args__ = (Index(None, "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    params: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    status: Mapped[str] = mapped_column(
+        String(16), default="queued"
+    )  # queued|running|done|failed|cancelled
+    created_at: Mapped[float] = mapped_column(Float, default=utcnow)
+    started_at: Mapped[float | None] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float)
+    exit_code: Mapped[int | None] = mapped_column(Integer)
+    pid: Mapped[int | None] = mapped_column(Integer)
+    log_path: Mapped[str | None] = mapped_column(String(1024))
+    result: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    created_by: Mapped[str] = mapped_column(String(64), default="system")

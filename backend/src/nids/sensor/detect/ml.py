@@ -42,13 +42,21 @@ class MlDetector:
         import pandas as pd  # the ml extra is only needed when a model is loaded
 
         flows, self._pending = self._pending, []
-        scores = self.bundle.score(pd.DataFrame([features_from_flow(f) for f in flows]))
+        frame = pd.DataFrame([features_from_flow(f) for f in flows])
+        scores = self.bundle.score(frame)
         self.scored += len(flows)
+        alerting = scores["alert"].to_numpy()
+        reasons = (
+            self.bundle.novelty_reasons(frame[alerting])
+            if alerting.any() and hasattr(self.bundle, "novelty_reasons")
+            else []
+        )
+        reason_iter = iter(reasons)
         for flow, row in zip(flows, scores.itertuples(index=False), strict=True):
             if row.alert:
-                self._emit(self._detection(flow, row))
+                self._emit(self._detection(flow, row, next(reason_iter, [])))
 
-    def _detection(self, flow: FlowRecord, row: Any) -> Detection:
+    def _detection(self, flow: FlowRecord, row: Any, unusual: list[str]) -> Detection:
         known = row.attack_prob >= self.bundle.attack_threshold and row.family != "benign"
         family = str(row.family) if known else None
         if known:
@@ -79,5 +87,6 @@ class MlDetector:
                 "packets": flow.packets,
                 "payload_bytes": flow.payload_bytes,
                 "dst_port": flow.dst_port,
+                "most_unusual_features": unusual,
             },
         )

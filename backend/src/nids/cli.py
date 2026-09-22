@@ -57,6 +57,18 @@ def api() -> None:
 
 
 @app.command()
+def openapi(
+    out: Annotated[Path, typer.Option(help="Where to write the schema.")] = Path("openapi.json"),
+) -> None:
+    """Write the API's OpenAPI schema (the frontend generates its types from it)."""
+    from nids.api.app import create_app
+
+    schema = create_app(background=False).openapi()
+    out.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+    typer.echo(f"Wrote {out} ({len(schema['paths'])} paths)")
+
+
+@app.command()
 def doctor(json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
     """Check whether this machine can capture packets, and how to fix it if not."""
     from nids.sensor.capability import check_capture
@@ -100,6 +112,19 @@ def _open_out(path: str) -> "nullcontext[IO[str] | None] | IO[str]":
     return open(path, "w", encoding="utf-8")
 
 
+def _graceful_signals() -> None:
+    """Treat SIGTERM (and CTRL_BREAK on Windows, sent by the API's supervisor) like Ctrl+C, so a
+    stop request flushes open flows and closes the session instead of killing the process."""
+    import signal
+
+    def interrupt(_signum: int, _frame: object) -> None:
+        raise KeyboardInterrupt
+
+    for name in ("SIGTERM", "SIGBREAK"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), interrupt)
+
+
 def _alert_printer(alert: "Alert", is_new: bool) -> None:
     if is_new:
         where = f"{alert.src or '*'} -> {alert.dst or '*'}"
@@ -117,41 +142,49 @@ def _run(
     use_db: bool,
 ) -> None:
     """Run capture + detection (+ storage) until the input ends or Ctrl+C, then summarise."""
+    from nids.core.schemas.runtime import RuntimeSettings
     from nids.sensor.capture import CaptureError
-    from nids.sensor.detect import DetectionEngine
+    from nids.sensor.detect import DetectionConfig, DetectionEngine
     from nids.sensor.pipeline import Pipeline
     from nids.sensor.runner import JsonlSink, run_in_background
     from nids.store import repo
     from nids.store.db import Database
 
     settings = get_settings()
-    engine = DetectionEngine()
+    db = Database(settings.database_url) if use_db else None
+    # Settings changed in the UI live in the database; without one, the defaults apply.
+    runtime = repo.get_runtime(db, settings) if db is not None else RuntimeSettings()
+    engine = DetectionEngine(config=DetectionConfig.from_runtime(runtime))
     if model is not None:
         engine.load_model(model)
-    db = Database(settings.database_url) if use_db else None
+        if engine.ml is not None and runtime.attack_threshold is not None:
+            engine.ml.bundle.attack_threshold = runtime.attack_threshold
+        if engine.ml is not None and runtime.novelty_threshold is not None:
+            engine.ml.bundle.novelty_threshold = runtime.novelty_threshold
 
     started = time.monotonic()
     error: str | None = None
     with _open_out(out) as stream:
-        pipeline = Pipeline(engine, db=db, flow_sample_rate=settings.flow_sample_rate)
+        pipeline = Pipeline(engine, db=db, flow_sample_rate=runtime.flow_sample_rate)
         source = source_factory(pipeline)
         if db is not None:
             pipeline.session_id = repo.start_session(
                 db, kind, label, source.name, engine.ml.model_version if engine.ml else None
             )
             pipeline.pseudonymizer = (
-                repo.Pseudonymizer.from_db(db) if settings.pseudonymize_ips else None
+                repo.Pseudonymizer.from_db(db) if runtime.pseudonymize_ips else None
             )
             pipeline.flow_writer = repo.FlowWriter(
                 db,
                 pipeline.session_id,
-                settings.flow_sample_rate,
+                runtime.flow_sample_rate,
                 pseudonymizer=pipeline.pseudonymizer,
             )
         if stream is not None:
             pipeline.extra_flow_sinks.append(JsonlSink(stream))
         pipeline.alert_listeners.append(_alert_printer)
 
+        _graceful_signals()
         thread, stop, errors = run_in_background(source, pipeline.on_flow)
         try:
             while thread.is_alive():
@@ -414,25 +447,54 @@ def train(
 @app.command()
 def evaluate(
     model: Annotated[Path, typer.Option(exists=True, file_okay=False, help="Artifact directory.")],
-    dataset: Annotated[str, typer.Option(help="Prepared dataset to test on (e.g. the other one).")],
-    split_name: Annotated[
-        str, typer.Option("--split", help="all, train or test rows of that dataset.")
+    dataset: Annotated[str, typer.Option(help="Prepared dataset to test on.")],
+    protocol: Annotated[
+        str,
+        typer.Option(
+            help="Which rows: 'day'/'random'/'official' test split, or 'all' (cross-dataset)."
+        ),
     ] = "all",
+    heuristics: Annotated[
+        bool, typer.Option("--heuristics", help="Also run the scan/sweep detectors and combine.")
+    ] = False,
     data_dir: DataDirOpt = Path("data/processed"),
 ) -> None:
-    """Evaluate a saved model on another dataset (cross-dataset generalisation)."""
+    """Evaluate a saved model (and optionally the heuristics) on a prepared dataset."""
     from nids.ml import registry
     from nids.ml.evaluate import evaluate as run_evaluation
     from nids.ml.prepare import load_prepared
+    from nids.ml.splits import split
 
+    if protocol not in ("all", "day", "random", "official"):
+        raise typer.BadParameter("protocol must be all|day|random|official")
     bundle, manifest = registry.load(model)
     frame, _ = load_prepared(dataset, data_dir)
-    if split_name != "all":
-        frame = frame[frame["split"] == split_name]
+    if protocol != "all":
+        _, frame, _ = split(
+            frame, cast(Literal["day", "random", "official"], protocol), bundle.feature_names
+        )
     report = run_evaluation(bundle, frame, trained_families=set(bundle.classes))
-    alert = report["binary"]["alert_rule"]
-    typer.echo(f"Model {manifest['version']} on {dataset} ({len(frame):,} flows):")
-    typer.echo(json.dumps({"alert_rule": alert, "per_family": report["per_family"]}, indent=2))
+    summary: dict[str, object] = {
+        "model": manifest["version"],
+        "rows": len(frame),
+        "alert_rule": report["binary"]["alert_rule"],
+        "false_alerts_per_hour": report["false_alerts_per_hour"],
+        "per_family_ml": {k: v["alert_rate"] for k, v in report["per_family"].items()},
+    }
+    if heuristics:
+        from nids.ml.heuristics_eval import evaluate_heuristics
+
+        ml_alert = bundle.score(frame)["alert"].to_numpy()
+        combined = evaluate_heuristics(frame, ml_alert=ml_alert)
+        summary["heuristics"] = combined
+        if (
+            report["false_alerts_per_hour"] is not None
+            and combined["false_alerts_per_hour"] is not None
+        ):
+            summary["false_alerts_per_hour_combined"] = (
+                report["false_alerts_per_hour"] + combined["false_alerts_per_hour"]
+            )
+    typer.echo(json.dumps(summary, indent=2, default=str))
 
 
 if __name__ == "__main__":

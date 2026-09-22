@@ -5,6 +5,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from nids.core.schemas.alert import AlertSource, Detection, Severity
 from nids.core.schemas.flow import FlowRecord
@@ -14,6 +15,9 @@ from nids.sensor.detect.flood import FloodConfig, FloodDetector
 from nids.sensor.detect.ml import MlDetector
 from nids.sensor.detect.scan import ScanConfig, ScanDetector
 from nids.sensor.packets import ACK, SYN, TCP, PacketMeta
+
+if TYPE_CHECKING:
+    from nids.core.schemas.runtime import RuntimeSettings
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +32,19 @@ class DetectionConfig:
     flood: FloodConfig = field(default_factory=FloodConfig)
     allowed_protocols: frozenset[int] = DEFAULT_ALLOWED_PROTOCOLS
     dedup_window_s: float = 900.0
+
+    @classmethod
+    def from_runtime(cls, rt: "RuntimeSettings") -> "DetectionConfig":
+        return cls(
+            scan=ScanConfig(
+                window_s=rt.scan_window_s, min_ports=rt.scan_min_ports, min_hosts=rt.sweep_min_hosts
+            ),
+            flood=FloodConfig(
+                min_syn_rate=rt.flood_min_syn_rate, min_pps=rt.flood_min_pps, z=rt.flood_z
+            ),
+            allowed_protocols=frozenset(rt.allowed_protocols),
+            dedup_window_s=rt.dedup_window_s,
+        )
 
 
 class DetectionEngine:

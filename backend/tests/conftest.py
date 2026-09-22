@@ -14,6 +14,9 @@ def isolated_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterat
     CLI runs in a subprocess, which inherit the environment."""
     url = f"sqlite:///{(tmp_path / 'nids-test.db').as_posix()}"
     monkeypatch.setenv("NIDS_DATABASE_URL", url)
+    monkeypatch.setenv("NIDS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("NIDS_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("NIDS_FRONTEND_DIR", str(tmp_path / "frontend-out"))
     get_settings.cache_clear()
     yield url
     get_settings.cache_clear()

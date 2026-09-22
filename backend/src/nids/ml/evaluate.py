@@ -51,6 +51,21 @@ def benign_hours(test: pd.DataFrame) -> float | None:
     return hours if hours > 0 else None
 
 
+ALERT_WINDOW_S = 900  # the correlator's default dedup window
+
+
+def alert_groups(flows: pd.DataFrame) -> int | None:
+    """How many alerts these alerting flows would become after the correlator merges repeats
+    between the same two hosts (approximated with fixed 15-minute windows). None if the dataset
+    has no endpoints or timestamps."""
+    if flows.empty:
+        return 0
+    if "src_ip" not in flows or (flows["src_ip"] == "").all() or flows["timestamp"].isna().all():
+        return None
+    window = flows["timestamp"].astype("int64") // 10**9 // ALERT_WINDOW_S
+    return int(flows.assign(_w=window).groupby(["src_ip", "dst_ip", "_w"]).ngroups)
+
+
 def threshold_sweep(y_attack: np.ndarray, score: np.ndarray) -> list[dict[str, float | None]]:
     points = []
     for t in (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 0.995, 0.999):
@@ -86,6 +101,8 @@ def evaluate(
 
     hours = benign_hours(test)
     benign_alerts = int((alert & ~y_attack).sum())
+    false_alerts = alert_groups(test[alert & ~y_attack])
+    true_alerts = alert_groups(test[alert & y_attack])
     return {
         "rows": len(test),
         "multiclass": {
@@ -110,6 +127,11 @@ def evaluate(
         },
         "per_family": per_family,
         "false_positives_per_hour": benign_alerts / hours if hours else None,
+        # What an analyst sees: repeats between the same hosts merged into one alert.
+        "false_alerts_per_hour": false_alerts / hours
+        if hours and false_alerts is not None
+        else None,
+        "attack_alerts": true_alerts,
         "benign_hours": hours,
         "threshold_sweep_supervised": threshold_sweep(y_attack, scores["attack_prob"].to_numpy()),
     }

@@ -133,7 +133,19 @@ def load_file(path: Path, attempted: AttemptedMode = "benign") -> pd.DataFrame:
             f"(missing: {', '.join(missing + ([] if label_col else ['Label']))})."
         )
     ts_col = columns.get("timestamp")
-    usecols = {c for c, _ in wanted.values()} | {label_col} | ({ts_col} if ts_col else set())
+    endpoint_cols = {
+        name: columns.get(alias)
+        for name, alias in (
+            ("src_ip", "srcip"),
+            ("dst_ip", "dstip"),
+            ("src_port", "srcport"),
+            ("dst_port", "dstport"),
+        )
+    }
+    if endpoint_cols["dst_port"] is None:  # the original release: " Destination Port" only
+        endpoint_cols["dst_port"] = columns.get("destinationport")
+    extra = {c for c in endpoint_cols.values() if c} | ({ts_col} if ts_col else set())
+    usecols = {c for c, _ in wanted.values()} | {label_col} | extra
     raw = pd.read_csv(
         path, usecols=list(usecols), encoding="latin-1", skipinitialspace=True, low_memory=False
     )
@@ -170,6 +182,7 @@ def load_file(path: Path, attempted: AttemptedMode = "benign") -> pd.DataFrame:
             "split": "",
             "timestamp": timestamps,
             "source_file": path.name,
+            **{name: raw[col] for name, col in endpoint_cols.items() if col},
         },
         index=raw.index,
     )

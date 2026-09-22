@@ -9,7 +9,7 @@ import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
@@ -27,6 +27,10 @@ from nids.store.models import (
     SuppressionRuleRow,
     utcnow,
 )
+
+if TYPE_CHECKING:
+    from nids.core.schemas.runtime import RuntimeSettings
+    from nids.core.settings import Settings
 
 # --- settings stored in the database --------------------------------------------------------
 
@@ -400,3 +404,45 @@ def add_suppression_rule(
         s.flush()
         audit(s, actor, "suppression.add", str(row.id), type=rule.type, src=rule.src, dst=rule.dst)
         return row.id
+
+
+# --- runtime settings (changed from the UI) ----------------------------------------------------
+
+RUNTIME_KEY = "runtime"
+
+
+def get_runtime(db: Database, base: "Settings") -> "RuntimeSettings":
+    """Stored UI settings on top of the defaults from the environment/.env."""
+    from nids.core.schemas.runtime import RuntimeSettings
+
+    defaults = {
+        "flow_sample_rate": base.flow_sample_rate,
+        "retention_flows_days": base.retention_flows_days,
+        "retention_alerts_days": base.retention_alerts_days,
+        "pseudonymize_ips": base.pseudonymize_ips,
+    }
+    with db.session() as s:
+        stored = get_setting(s, RUNTIME_KEY, {}) or {}
+    known = set(RuntimeSettings.model_fields)
+    return RuntimeSettings(**(defaults | {k: v for k, v in stored.items() if k in known}))
+
+
+def update_runtime(
+    db: Database, base: "Settings", changes: dict[str, Any], actor: str
+) -> "RuntimeSettings":
+    """Validate and store a partial update. Raises pydantic.ValidationError on bad values."""
+    from nids.core.schemas.runtime import RuntimeSettings
+
+    current = get_runtime(db, base)
+    updated = RuntimeSettings(**(current.model_dump() | changes))
+    diff = {
+        k: {"from": getattr(current, k), "to": getattr(updated, k)}
+        for k in changes
+        if getattr(current, k) != getattr(updated, k)
+    }
+    with db.session() as s:
+        stored = get_setting(s, RUNTIME_KEY, {}) or {}
+        set_setting(s, RUNTIME_KEY, stored | {k: getattr(updated, k) for k in changes})
+        if diff:
+            audit(s, actor, "settings.update", None, changes=diff)
+    return updated

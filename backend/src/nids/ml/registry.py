@@ -108,6 +108,25 @@ def save(
     return directory
 
 
+def verify(directory: Path) -> dict[str, Any]:
+    """Check an artifact's manifest, feature schema and file hash WITHOUT unpickling it.
+    Returns the manifest. Used to list and register models safely."""
+    manifest_path, model_path = directory / MANIFEST_FILE, directory / MODEL_FILE
+    if not manifest_path.is_file() or not model_path.is_file():
+        raise ModelLoadError(
+            f"{directory} is not a model artifact (manifest.json/model.joblib missing)."
+        )
+    manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema_hash") != SCHEMA_HASH:
+        raise ModelLoadError(
+            f"Model {manifest.get('version')} expects feature schema "
+            f"{manifest.get('schema_hash')}, but this code produces {SCHEMA_HASH}. Retrain it."
+        )
+    if _sha256(model_path) != manifest.get("sha256"):
+        raise ModelLoadError(f"{model_path} does not match the hash in its manifest.")
+    return manifest
+
+
 def load(
     directory: Path, allow_library_mismatch: bool = False
 ) -> tuple[DetectorBundle, dict[str, Any]]:

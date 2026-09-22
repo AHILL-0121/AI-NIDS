@@ -18,6 +18,9 @@ def render_model_card(manifest: dict[str, Any], report: dict[str, Any]) -> str:
     rows = training["rows"]
     fph = report["false_positives_per_hour"]
     fph_text = _num(fph, 1) if fph is not None else "n/a (no timestamps)"
+    fah = report.get("false_alerts_per_hour")
+    fah_text = _num(fah, 1) if fah is not None else "n/a (no endpoints/timestamps)"
+    validation = report.get("validation", {})
     macro_f1 = _num(report["multiclass"]["macro_f1_known_families"])
     lines = [
         f"# Model card: {manifest['version']}",
@@ -53,8 +56,20 @@ def render_model_card(manifest: dict[str, Any], report: dict[str, Any]) -> str:
         )
     lines += [
         "",
-        f"- **False positives per hour of benign traffic:** {fph_text}",
+        f"- **False-positive flows per hour of benign traffic:** {fph_text}",
+        f"- **False alerts per hour** (repeats between the same hosts merged, as the analyst "
+        f"sees them): {fah_text}",
         f"- **Macro-F1 over families seen in training:** {macro_f1}",
+        "",
+        "## How the novelty threshold was chosen",
+        "",
+        f"- Method: {validation.get('method', 'n/a')}; "
+        f"threshold {validation.get('threshold', 'n/a')}",
+        f"- On validation (training days only): false alerts/h "
+        f"{validation.get('validation_false_alerts_per_hour', 'n/a')}, novelty recall "
+        f"{_pct(validation.get('validation_novelty_recall'))}, classifier false-positive rate "
+        f"{_pct(validation.get('validation_classifier_fpr'))}",
+        *([f"- Note: {validation['note']}"] if "note" in validation else []),
         "",
         "## Detection by attack family",
         "",

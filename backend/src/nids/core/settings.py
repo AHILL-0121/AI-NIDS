@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     retention_traffic_1m_days: float = Field(default=90, gt=0)
     pseudonymize_ips: bool = False  # store IP addresses as keyed hashes (audit SEC-11)
 
+    # API (Phase 5)
+    data_dir: str = "data"  # uploads/, jobs/, logs/ live here
+    artifacts_dir: str = "artifacts"
+    frontend_dir: str = "../frontend/out"  # the Next.js static export, served when present
+    session_ttl_hours: float = Field(default=12, gt=0, le=24 * 30)
+    secure_cookies: bool = False  # set True when served over HTTPS
+    allowed_origins: list[str] = []  # extra browser origins for the WebSocket (dev servers)
+    upload_max_mb: int = Field(default=512, gt=0, le=10_240)
+    max_concurrent_jobs: int = Field(default=2, ge=1, le=8)
+
 
 @lru_cache
 def get_settings() -> Settings:
