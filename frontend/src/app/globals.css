@@ -1,0 +1,84 @@
+@import "tailwindcss";
+@import "../design/tokens.css";
+
+/* Tailwind reads the design tokens only through this mapping, so utilities stay theme-aware. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-raised: var(--surface-raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-wash: var(--accent-wash);
+  --color-sev-critical: var(--sev-critical);
+  --color-sev-high: var(--sev-high);
+  --color-sev-medium: var(--sev-medium);
+  --color-sev-low: var(--sev-low);
+  --color-sev-info: var(--sev-info);
+  --color-ok: var(--ok);
+
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  --radius-control: 4px;
+  --radius-panel: 6px;
+  --shadow-float: var(--shadow-float);
+
+  /* Type scale (plan/design.md §5.4): size / line-height. */
+  --text-label: 11px;
+  --text-label--line-height: 16px;
+  --text-label--letter-spacing: 0.06em;
+  --text-meta: 12px;
+  --text-meta--line-height: 16px;
+  --text-dense: 13px;
+  --text-dense--line-height: 20px;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-section: 16px;
+  --text-section--line-height: 24px;
+  --text-page: 20px;
+  --text-page--line-height: 28px;
+  --text-kpi: 28px;
+  --text-kpi--line-height: 32px;
+  --text-hero: 40px;
+  --text-hero--line-height: 44px;
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--accent-wash);
+    color: var(--ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

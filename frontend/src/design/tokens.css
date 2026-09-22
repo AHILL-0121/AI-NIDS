@@ -1,0 +1,74 @@
+/*
+ * "Signal Paper" design tokens. Source of truth: plan/design.md §5.3.
+ * Light is the default; dark reuses the same token names under [data-theme="dark"].
+ * Contrast (WCAG): text ≥ 4.5:1 and control borders ≥ 3:1 on the surfaces they're used on.
+ */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #fafaf7;
+  --surface: #ffffff;
+  --surface-sunken: #f2f1ec;
+  --surface-raised: #ffffff;
+
+  --line: #e4e2dc;
+  --line-strong: #8c8f94;
+
+  --ink: #14161a;
+  --ink-muted: #555a61;
+  --ink-subtle: #62676f;
+
+  --accent: #0e6f68;
+  --accent-ink: #ffffff;
+  --accent-wash: #e3f1ef;
+
+  --sev-critical: #b42318;
+  --sev-high: #b93815;
+  --sev-medium: #8f5200;
+  --sev-low: #1d5fa0;
+  --sev-info: #555a61;
+  --ok: #2b7a3d;
+
+  --wash-strength: 8%;
+  --shadow-float: 0 8px 24px rgb(20 22 26 / 0.12);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0f1113;
+  --surface: #16191c;
+  --surface-sunken: #0b0d0f;
+  --surface-raised: #1d2125;
+
+  --line: #262b30;
+  --line-strong: #6b737c;
+
+  --ink: #e8e6e1;
+  --ink-muted: #a6aab0;
+  --ink-subtle: #8a8f96;
+
+  --accent: #3cc9b5;
+  --accent-ink: #0f1113;
+  --accent-wash: #12302c;
+
+  --sev-critical: #ff7a6e;
+  --sev-high: #ff9466;
+  --sev-medium: #f2b84b;
+  --sev-low: #6fb4f2;
+  --sev-info: #a6aab0;
+  --ok: #5dc48a;
+
+  --wash-strength: 14%;
+  --shadow-float: 0 8px 24px rgb(0 0 0 / 0.5);
+}
+
+:root {
+  /* Severity chip backgrounds: a tint of the severity colour over the surface. */
+  --sev-critical-wash: color-mix(in srgb, var(--sev-critical) var(--wash-strength), var(--surface));
+  --sev-high-wash: color-mix(in srgb, var(--sev-high) var(--wash-strength), var(--surface));
+  --sev-medium-wash: color-mix(in srgb, var(--sev-medium) var(--wash-strength), var(--surface));
+  --sev-low-wash: color-mix(in srgb, var(--sev-low) var(--wash-strength), var(--surface));
+}
