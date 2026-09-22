@@ -74,6 +74,10 @@ def html_to_pdf(
             "--disable-extensions",
             "--disable-background-networking",
             "--disable-sync",
+            "--disable-breakpad",
+            "--disable-dev-shm-usage",  # containers often have a tiny /dev/shm
+            "--password-store=basic",  # never wait on a desktop keyring
+            "--use-mock-keychain",
             "--host-resolver-rules=MAP * ~NOTFOUND",  # nothing in the report may go online
             "--no-pdf-header-footer",
             f"--user-data-dir={profile}",
@@ -85,14 +89,24 @@ def html_to_pdf(
             # user namespaces it needs. The page is our own script-free HTML with no network, so
             # running it unsandboxed is an acceptable trade.
             args.insert(1, "--no-sandbox")
-        try:
-            done = subprocess.run(  # noqa: S603 - fixed executable found above, no shell
-                args, capture_output=True, timeout=timeout_s, check=False
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise PdfError(f"The browser took longer than {timeout_s:.0f} s.") from exc
-        except OSError as exc:
-            raise PdfError(f"Couldn't start {browser.name}: {exc}") from exc
+        # stderr goes to a file, not a pipe: Chrome's helpers (crashpad) inherit its handles and
+        # can outlive it, and reading a pipe would wait for them too, until the timeout.
+        with tempfile.TemporaryFile() as err:
+            try:
+                done = subprocess.run(  # noqa: S603 - fixed executable found above, no shell
+                    args,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=err,
+                    timeout=timeout_s,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise PdfError(f"The browser took longer than {timeout_s:.0f} s.") from exc
+            except OSError as exc:
+                raise PdfError(f"Couldn't start {browser.name}: {exc}") from exc
+            err.seek(0)
+            stderr = err.read().decode(errors="replace")
     if not pdf.is_file() or pdf.stat().st_size == 0:
-        detail = done.stderr.decode(errors="replace").strip().splitlines()[-1:] or ["no output"]
+        detail = stderr.strip().splitlines()[-1:] or ["no output"]
         raise PdfError(f"{browser.name} exited with {done.returncode}: {detail[0]}")
