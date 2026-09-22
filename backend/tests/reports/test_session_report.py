@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
+from nids.core.settings import Settings
 from nids.reports.pdf import find_browser
 from nids.reports.session import ReportError, collect, render, write_report
 from nids.store.db import Database
@@ -87,7 +88,8 @@ def test_pdf_is_skipped_with_a_reason_when_no_browser(db: Database, tmp_path: Pa
 def test_pdf_is_printed_by_a_local_browser(db: Database, tmp_path: Path) -> None:
     session_id = scanned_session(db)
 
-    result = write_report(db, session_id, tmp_path / "r")
+    no_sandbox = Settings().pdf_no_sandbox  # CI turns the sandbox off, as the Docker image does
+    result = write_report(db, session_id, tmp_path / "r", no_sandbox=no_sandbox)
 
-    assert result["pdf"] is True, result
+    assert result["pdf"] is True, result.get("pdf_error")  # a message, so pytest won't cut it
     assert (tmp_path / "r.pdf").read_bytes().startswith(b"%PDF")

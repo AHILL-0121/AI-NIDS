@@ -34,11 +34,6 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
 
-      # Ubuntu 24.04 blocks the user namespaces Chrome's sandbox needs; the report PDF test
-      # prints with the runner's preinstalled Chrome.
-      - name: Allow Chrome's sandbox
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-
       - name: Install (all extras, locked)
         run: uv sync --locked --all-extras
 
@@ -52,6 +47,10 @@ jobs:
 
       - name: Tests (fails under 75 % coverage)
         run: uv run pytest --cov=nids --cov-report=term --cov-report=xml
+        env:
+          # The report PDF test prints with the runner's Chrome, whose sandbox never starts a
+          # renderer there (the browser hangs). Same trade as the Docker image: our own page.
+          NIDS_PDF_NO_SANDBOX: "true"
 
       - name: Coverage gates for core/ and sensor/ (85 %)
         run: |
