@@ -1,7 +1,8 @@
 """NFStream capture backend (Linux). NFStream assembles flows in C (libpcap + nDPI).
 
-Byte counts use `accounting_mode=1` (IP level), the same as the Scapy flow table. NFStream can't
-report transport payload bytes in the same pass, so `payload_bytes` is None for these flows.
+Sizes use `accounting_mode=3` (transport payload), matching CICFlowMeter and the Scapy flow table's
+payload statistics. NFStream can't also report IP-level sizes in the same pass, so `ip_bytes` and
+`ip_len_mean` are None for these flows.
 """
 
 import logging
@@ -32,13 +33,15 @@ def _direction(f: Any, prefix: str) -> DirectionStats:
 
     return DirectionStats(
         packets=int(g("packets")),
-        bytes=int(g("bytes")),
-        payload_bytes=None,
-        pkt_len_min=float(g("min_ps")),
-        pkt_len_max=float(g("max_ps")),
-        pkt_len_mean=float(g("mean_ps")),
-        pkt_len_std=float(g("stddev_ps")),
+        payload_bytes=int(g("bytes")),
+        payload_len_min=float(g("min_ps")),
+        payload_len_max=float(g("max_ps")),
+        payload_len_mean=float(g("mean_ps")),
+        payload_len_std=float(g("stddev_ps")),
         iat_mean=float(g("mean_piat_ms")) / 1000.0,
+        iat_std=float(g("stddev_piat_ms")) / 1000.0,
+        iat_min=float(g("min_piat_ms")) / 1000.0,
+        iat_max=float(g("max_piat_ms")) / 1000.0,
         syn=int(g("syn_packets")),
         fin=int(g("fin_packets")),
         rst=int(g("rst_packets")),
@@ -110,7 +113,7 @@ class NfstreamSource:
                 bpf_filter=self.bpf_filter,
                 idle_timeout=max(1, round(self.config.idle_timeout)),
                 active_timeout=max(1, round(self.config.active_timeout)),
-                accounting_mode=1,
+                accounting_mode=3,  # payload sizes, as in CICFlowMeter
                 statistical_analysis=True,
                 n_dissections=20,
             )

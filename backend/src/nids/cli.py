@@ -126,7 +126,7 @@ def replay(
     out: OutOpt = "-",
     speed: Annotated[str, typer.Option(help="max or realtime.")] = "max",
     backend: Annotated[str, typer.Option(help="scapy (any OS) or nfstream (Linux).")] = "scapy",
-    idle_timeout: IdleOpt = 15.0,
+    idle_timeout: IdleOpt = 120.0,
     active_timeout: ActiveOpt = 120.0,
 ) -> None:
     """Stream a PCAP file through the flow pipeline and write the flows."""
@@ -153,7 +153,7 @@ def sensor(
     bpf_filter: Annotated[
         str | None, typer.Option("--filter", help="BPF filter, e.g. 'tcp'.")
     ] = None,
-    idle_timeout: IdleOpt = 15.0,
+    idle_timeout: IdleOpt = 120.0,
     active_timeout: ActiveOpt = 120.0,
 ) -> None:
     """Capture live traffic (needs capture privileges). Stop with Ctrl+C."""
@@ -177,11 +177,97 @@ def sensor(
     _run(source, out)
 
 
+data_app = typer.Typer(help="Prepare training datasets.", no_args_is_help=True)
+app.add_typer(data_app, name="data")
+
+DataDirOpt = Annotated[Path, typer.Option(help="Where prepared datasets live.")]
+ArtifactsOpt = Annotated[Path, typer.Option(help="Where model artifacts are written.")]
+
+
+@data_app.command("prepare")
+def data_prepare(
+    dataset: Annotated[str, typer.Argument(help="cicids2017 or unsw-nb15.")],
+    src: Annotated[Path, typer.Option(exists=True, file_okay=False, help="Folder with the CSVs.")],
+    out: DataDirOpt = Path("data/processed"),
+    attempted: Annotated[
+        str, typer.Option(help="CIC-IDS2017 '- Attempted' flows: benign (default) or separate.")
+    ] = "benign",
+) -> None:
+    """Convert a dataset's CSVs into features_v1 (parquet + metadata)."""
+    from nids.ml.datasets import DatasetError
+    from nids.ml.prepare import prepare
+
+    if attempted not in ("benign", "separate"):
+        raise typer.BadParameter("attempted must be benign or separate")
+    try:
+        path = prepare(dataset, src, out, cast(Literal["benign", "separate"], attempted))
+    except DatasetError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    meta = json.loads(path.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    typer.echo(f"Wrote {path} ({meta['rows']:,} flows)")
+    for family, count in meta["families"].items():
+        typer.echo(f"  {family:<14} {count:>10,}")
+
+
 @app.command()
-def train() -> None:
-    """Train a detection model from a dataset."""
-    typer.echo("Not implemented yet (see plan/checklist.md, Phase 2).", err=True)
-    raise typer.Exit(code=2)
+def train(
+    dataset: Annotated[str, typer.Option(help="cicids2017 or unsw-nb15.")],
+    protocol: Annotated[str, typer.Option(help="day, random or official.")] = "day",
+    features: Annotated[str, typer.Option(help="full, or shared (cross-dataset subset).")] = "full",
+    sample_frac: Annotated[float | None, typer.Option(help="Train on a per-family sample.")] = None,
+    seed: int = 42,
+    data_dir: DataDirOpt = Path("data/processed"),
+    out: ArtifactsOpt = Path("artifacts"),
+) -> None:
+    """Train the detector on a prepared dataset, evaluate on the held-out split, save it."""
+    from nids.ml import registry
+    from nids.ml.datasets import DatasetError
+    from nids.ml.prepare import load_prepared
+    from nids.ml.train import TrainConfig
+    from nids.ml.train import train as run_training
+
+    if protocol not in ("day", "random", "official") or features not in ("full", "shared"):
+        raise typer.BadParameter("protocol must be day|random|official, features full|shared")
+    try:
+        frame, _ = load_prepared(dataset, data_dir)
+        config = TrainConfig(
+            protocol=cast(Literal["day", "random", "official"], protocol),
+            feature_set=cast(Literal["full", "shared"], features),
+            seed=seed,
+            sample_frac=sample_frac,
+        )
+        result = run_training(frame, dataset, config)
+    except DatasetError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    directory = registry.save(result.bundle, result.report, out)
+    typer.echo((directory / registry.CARD_FILE).read_text(encoding="utf-8"))
+    typer.echo(f"Saved model to {directory}")
+
+
+@app.command()
+def evaluate(
+    model: Annotated[Path, typer.Option(exists=True, file_okay=False, help="Artifact directory.")],
+    dataset: Annotated[str, typer.Option(help="Prepared dataset to test on (e.g. the other one).")],
+    split_name: Annotated[
+        str, typer.Option("--split", help="all, train or test rows of that dataset.")
+    ] = "all",
+    data_dir: DataDirOpt = Path("data/processed"),
+) -> None:
+    """Evaluate a saved model on another dataset (cross-dataset generalisation)."""
+    from nids.ml import registry
+    from nids.ml.evaluate import evaluate as run_evaluation
+    from nids.ml.prepare import load_prepared
+
+    bundle, manifest = registry.load(model)
+    frame, _ = load_prepared(dataset, data_dir)
+    if split_name != "all":
+        frame = frame[frame["split"] == split_name]
+    report = run_evaluation(bundle, frame, trained_families=set(bundle.classes))
+    alert = report["binary"]["alert_rule"]
+    typer.echo(f"Model {manifest['version']} on {dataset} ({len(frame):,} flows):")
+    typer.echo(json.dumps({"alert_rule": alert, "per_family": report["per_family"]}, indent=2))
 
 
 if __name__ == "__main__":

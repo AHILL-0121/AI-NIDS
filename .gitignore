@@ -20,6 +20,7 @@ backend/htmlcov/
 backend/*.egg-info/
 backend/dist/
 backend/data/raw/
+backend/data/processed/
 backend/artifacts/
 backend/*.db
 backend/*.db-*

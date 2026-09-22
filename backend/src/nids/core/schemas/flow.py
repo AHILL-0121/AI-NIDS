@@ -1,9 +1,13 @@
 """The flow record every capture backend produces.
 
 A flow is a bidirectional conversation keyed by its 5-tuple. "Forward" means the direction of the
-first packet seen (the initiator); "backward" is the reply direction. Lengths are IP-level (IP
-header included, link layer excluded), so values don't depend on Ethernet vs. Wi-Fi vs. loopback
-capture. Times are seconds (float, Unix epoch).
+first packet seen (the initiator); "backward" is the reply direction. Times are seconds (float,
+Unix epoch).
+
+Length statistics follow CICFlowMeter, the tool that produced the CIC-IDS2017 training data:
+"packet length" means **transport payload** bytes, and standard deviations are **sample** (n-1)
+deviations. IP-level sizes (headers included) are kept too, because UNSW-NB15 measures traffic
+that way, but some backends can't provide them (they're None then).
 
 Phase 2's feature schema (features_v1) is computed from these fields, so any field added here must
 be filled by every backend, or be optional and documented as such.
@@ -26,19 +30,23 @@ class EndReason(StrEnum):
 @dataclass(frozen=True, slots=True)
 class DirectionStats:
     packets: int
-    bytes: int
-    payload_bytes: int | None  # None when the backend can't measure it (NFStream)
-    pkt_len_min: float
-    pkt_len_max: float
-    pkt_len_mean: float
-    pkt_len_std: float
+    payload_bytes: int
+    payload_len_min: float
+    payload_len_max: float
+    payload_len_mean: float
+    payload_len_std: float
     iat_mean: float  # seconds between packets in this direction
+    iat_std: float
+    iat_min: float
+    iat_max: float
     syn: int
     fin: int
     rst: int
     psh: int
     ack: int
     urg: int
+    ip_bytes: int | None = None  # IP header + payload; None if the backend can't measure it
+    ip_len_mean: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,8 +78,14 @@ class FlowRecord:
         return self.fwd.packets + self.bwd.packets
 
     @property
-    def bytes(self) -> int:
-        return self.fwd.bytes + self.bwd.bytes
+    def payload_bytes(self) -> int:
+        return self.fwd.payload_bytes + self.bwd.payload_bytes
+
+    @property
+    def ip_bytes(self) -> int | None:
+        if self.fwd.ip_bytes is None or self.bwd.ip_bytes is None:
+            return None
+        return self.fwd.ip_bytes + self.bwd.ip_bytes
 
     def to_dict(self) -> dict[str, Any]:
         """Flat JSON-ready dict: nested direction stats become fwd_* / bwd_* keys."""

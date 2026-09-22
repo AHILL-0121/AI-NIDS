@@ -181,6 +181,9 @@ def _nf_flow(**overrides: Any) -> SimpleNamespace:
             f"{d}_mean_ps": 100.0,
             f"{d}_stddev_ps": 3.0,
             f"{d}_mean_piat_ms": 400.0,
+            f"{d}_stddev_piat_ms": 20.0,
+            f"{d}_min_piat_ms": 1.0,
+            f"{d}_max_piat_ms": 800.0,
             f"{d}_syn_packets": 1,
             f"{d}_fin_packets": 1,
             f"{d}_rst_packets": 0,
@@ -197,9 +200,9 @@ def test_nfstream_flow_maps_to_flow_record() -> None:
     assert record.flow_id == "nfs-7"
     assert record.duration == pytest.approx(2.5)  # milliseconds converted to seconds
     assert record.iat_max == pytest.approx(0.9)
-    assert (record.fwd.packets, record.bwd.bytes) == (6, 400)
-    assert record.fwd.payload_bytes is None  # NFStream can't report it in IP accounting mode
-    assert record.fwd.iat_mean == pytest.approx(0.4)
+    assert (record.fwd.packets, record.bwd.payload_bytes) == (6, 400)
+    assert record.fwd.ip_bytes is None  # NFStream runs in payload accounting mode
+    assert record.fwd.iat_mean == pytest.approx(0.4) and record.fwd.iat_max == pytest.approx(0.8)
     assert record.end_reason is EndReason.IDLE_TIMEOUT
     assert record.app_protocol == "TLS.Google"
 

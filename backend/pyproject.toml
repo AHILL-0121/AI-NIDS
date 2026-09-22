@@ -25,9 +25,10 @@ capture = [
 ml = [
     "numpy>=2.0",
     "pandas>=2.2",
+    "pyarrow>=17.0",
     "scikit-learn>=1.5",
     "lightgbm>=4.5",
-    "shap>=0.46",
+    "joblib>=1.4",
 ]
 
 [project.scripts]
@@ -75,7 +76,16 @@ module = ["nids.core.*", "nids.sensor.flows", "nids.sensor.packets"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["scapy.*", "nfstream.*"]
+module = ["pandas.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["nids.ml.*"]
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["scapy.*", "nfstream.*", "sklearn.*", "lightgbm.*", "joblib.*", "pyarrow.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
