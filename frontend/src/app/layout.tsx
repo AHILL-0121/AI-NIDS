@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 
 import { THEME_BOOT_SCRIPT } from "@/design/theme";
+import { Providers } from "@/lib/providers";
 
 import "./globals.css";
 
@@ -21,7 +22,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI-NIDS",
+  title: { default: "AI-NIDS", template: "%s · AI-NIDS" },
   description: "Flow-based network intrusion detection",
 };
 
@@ -37,7 +38,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
-      <body className="min-h-dvh bg-bg text-ink">{children}</body>
+      <body className="min-h-dvh bg-bg text-ink">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

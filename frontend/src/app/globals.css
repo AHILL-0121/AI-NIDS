@@ -73,6 +73,20 @@
   }
 }
 
+/* Drawer and overlay entrances (design §5.5: 180 ms). */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

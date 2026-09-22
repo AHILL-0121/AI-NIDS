@@ -186,6 +186,23 @@ def test_flows_sessions_and_stats(client: TestClient) -> None:
     assert summary["open_alerts"] == {"medium": 2}
 
 
+def test_minute_series_covers_seconds_not_yet_rolled_up(client: TestClient) -> None:
+    from nids.store.retention import rollup_traffic
+
+    sign_in(client)
+    seed_alerts(client)
+    params = {"since": 0, "resolution": 60}
+
+    before = client.get("/api/stats/timeseries", params=params).json()
+    # A replay is rolled up once it finished more than two minutes ago.
+    rolled = rollup_traffic(client.app.state.db, now=time.time() + 600)  # type: ignore[attr-defined]
+    after = client.get("/api/stats/timeseries", params=params).json()
+
+    assert rolled > 0
+    assert all(b["ts"] % 60 == 0 for b in before)
+    assert sum(b["packets"] for b in before) == sum(b["packets"] for b in after) == 236
+
+
 # --- settings ------------------------------------------------------------------------------
 
 
@@ -329,6 +346,8 @@ def test_models_are_activated_by_registered_version_only(client: TestClient) -> 
     assert client.get("/api/models").json()[0]["active"] is True
     assert traversal.status_code == 404
     assert client.get("/api/sensor/status").json()["model_version"] == version
+    report = client.get(f"/api/models/{version}/report").json()
+    assert "per_family" in report and "confusion_matrix" in report["multiclass"]
 
 
 def test_sensor_start_checks_capability_and_interface(
@@ -402,9 +421,13 @@ def test_frontend_is_served_with_script_hashes(tmp_path: Path) -> None:
     (out / "index.html").write_bytes(b"<html><head><script>" + script + b"</script></head></html>")
     (out / "alerts" / "index.html").write_bytes(b"<html>alerts</html>")
     (out / "404.html").write_bytes(b"<html>not found</html>")
+    (out / "alerts" / "__next.!KGFwcCk" / "alerts").mkdir(parents=True)
+    (out / "alerts" / "__next.!KGFwcCk" / "alerts" / "__PAGE__.txt").write_text("segment")
     with make_client(frontend_dir=str(out)) as client:
         home = client.get("/")
         page = client.get("/alerts/")
+        probe = client.head("/alerts/")  # the Next.js router probes pages with HEAD
+        segment = client.get("/alerts/__next.!KGFwcCk.alerts.__PAGE__.txt?_rsc=abc")
         escape = client.get("/..%2F..%2Fsecret")
         api_miss = client.get("/api/nothing")
 
@@ -415,6 +438,8 @@ def test_frontend_is_served_with_script_hashes(tmp_path: Path) -> None:
         not in home.headers["content-security-policy"].split("script-src")[1].split(";")[0]
     )
     assert page.text == "<html>alerts</html>"
+    assert probe.status_code == 200 and probe.text == ""
+    assert segment.status_code == 200 and segment.text == "segment"
     assert escape.status_code == 404
     assert api_miss.status_code == 404 and api_miss.json()["error"]["code"] == "not_found"
 

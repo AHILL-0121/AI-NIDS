@@ -901,7 +901,7 @@
           "data"
         ],
         "summary": "Timeseries",
-        "description": "Traffic per second (resolution=1, last 24 h) or per minute (resolution=60), summed over\nsessions unless one is given. Replays keep their original timestamps; pass their session.",
+        "description": "Traffic per second (resolution=1, last 24 h) or per minute (resolution=60), summed over\nsessions unless one is given. Replays keep their original timestamps; pass their session.\n\nPer-minute rows are written by the retention roll-up, which only covers complete minutes and\nlags behind capture, so minutes it hasn't reached yet are built from per-second rows. Where\nboth exist the roll-up wins (its seconds may already have expired).",
         "operationId": "timeseries_api_stats_timeseries_get",
         "parameters": [
           {
@@ -909,14 +909,12 @@
             "in": "query",
             "required": false,
             "schema": {
-              "enum": [
-                1,
-                60
-              ],
               "type": "integer",
+              "description": "Bucket length in seconds: 1 or 60",
               "default": 1,
               "title": "Resolution"
-            }
+            },
+            "description": "Bucket length in seconds: 1 or 60"
           },
           {
             "name": "since",
@@ -1456,9 +1454,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Logs Api Logs Get"
+                  "$ref": "#/components/schemas/LogTail"
                 }
               }
             }
@@ -1505,8 +1501,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "additionalProperties": true
+                    "$ref": "#/components/schemas/AuditEntry"
                   },
                   "title": "Response Audit Log Api Audit Get"
                 }
@@ -1617,6 +1612,51 @@
                   },
                   "type": "object",
                   "title": "Response Deactivate Api Models Deactivate Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models/{version}/report": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Model Report",
+        "description": "The model's evaluation report (per-family results, confusion matrix, threshold sweep).",
+        "operationId": "model_report_api_models__version__report_get",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Model Report Api Models  Version  Report Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1859,6 +1899,54 @@
         "additionalProperties": false,
         "type": "object",
         "title": "AlertUpdate"
+      },
+      "AuditEntry": {
+        "properties": {
+          "ts": {
+            "type": "number",
+            "title": "Ts"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ts",
+          "actor",
+          "action",
+          "target",
+          "details"
+        ],
+        "title": "AuditEntry"
       },
       "AuthStatus": {
         "properties": {
@@ -2329,6 +2417,27 @@
           "created_by"
         ],
         "title": "JobOut"
+      },
+      "LogTail": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "lines"
+        ],
+        "title": "LogTail"
       },
       "ModelOut": {
         "properties": {

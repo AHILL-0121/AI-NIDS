@@ -141,3 +141,20 @@ def deactivate(
         set_setting(s, ACTIVE_KEY, None)
         audit(s, principal.username, "model.deactivate", None)
     return {"active": None}
+
+
+@router.get("/{version}/report")
+def model_report(
+    version: str,
+    request: Request,
+    _: Principal = Depends(require_user),
+    db: Database = Depends(get_db),
+) -> dict[str, Any]:
+    """The model's evaluation report (per-family results, confusion matrix, threshold sweep)."""
+    import json
+
+    path = model_path(db, request.app.state.settings, version) / "report.json"
+    if not path.is_file():
+        raise ApiError(404, f"Model {version} has no report.")
+    report: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return report

@@ -308,6 +308,19 @@ def tail(path: Path, lines: int) -> list[str]:
     return list(deque(data.decode("utf-8", errors="replace").splitlines(), maxlen=lines))
 
 
+class LogTail(BaseModel):
+    source: str
+    lines: list[str]
+
+
+class AuditEntry(BaseModel):
+    ts: float
+    actor: str
+    action: str
+    target: str | None
+    details: dict[str, Any] | None
+
+
 @router.get("/logs")
 def logs(
     request: Request,
@@ -315,7 +328,7 @@ def logs(
     lines: int = Query(default=200, ge=1, le=5000),
     _: Principal = Depends(require_user),
     db: Database = Depends(get_db),
-) -> dict[str, Any]:
+) -> LogTail:
     """Tail of the API log, or of one job's log (`job:<id>`, e.g. the sensor's)."""
     data_dir = Path(request.app.state.settings.data_dir)
     if source == "api":
@@ -326,7 +339,7 @@ def logs(
             if job is None or not job.log_path:
                 raise ApiError(404, "No such job log.")
             path = Path(job.log_path)
-    return {"source": source, "lines": tail(path, lines)}
+    return LogTail(source=source, lines=tail(path, lines))
 
 
 @router.get("/audit")
@@ -334,18 +347,12 @@ def audit_log(
     limit: int = Query(default=100, ge=1, le=1000),
     _: Principal = Depends(require_user),
     db: Database = Depends(get_db),
-) -> list[dict[str, Any]]:
+) -> list[AuditEntry]:
     from nids.store.models import AuditLog
 
     with db.session() as s:
         rows = s.scalars(select(AuditLog).order_by(desc(AuditLog.ts)).limit(limit)).all()
         return [
-            {
-                "ts": r.ts,
-                "actor": r.actor,
-                "action": r.action,
-                "target": r.target,
-                "details": r.details,
-            }
+            AuditEntry(ts=r.ts, actor=r.actor, action=r.action, target=r.target, details=r.details)
             for r in rows
         ]

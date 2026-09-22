@@ -261,28 +261,45 @@ _COUNTERS = (
 
 @router.get("/stats/timeseries")
 def timeseries(
-    resolution: Literal[1, 60] = 1,
+    # A Literal[1, 60] query parameter rejects the string "60", so validate by hand.
+    resolution: int = Query(default=1, description="Bucket length in seconds: 1 or 60"),
     since: float | None = Query(default=None, description="Epoch seconds; default: last 15 min"),
     session_id: str | None = None,
     _: Principal = Depends(require_user),
     db: Database = Depends(get_db),
 ) -> list[Bucket]:
     """Traffic per second (resolution=1, last 24 h) or per minute (resolution=60), summed over
-    sessions unless one is given. Replays keep their original timestamps; pass their session."""
+    sessions unless one is given. Replays keep their original timestamps; pass their session.
+
+    Per-minute rows are written by the retention roll-up, which only covers complete minutes and
+    lags behind capture, so minutes it hasn't reached yet are built from per-second rows. Where
+    both exist the roll-up wins (its seconds may already have expired)."""
+    if resolution not in (1, 60):
+        raise ApiError(422, "resolution must be 1 or 60.")
     start = since if since is not None else time.time() - 900
-    stmt = (
-        select(Traffic.ts, *(func.sum(getattr(Traffic, c)).label(c) for c in _COUNTERS))
-        .where(Traffic.resolution == resolution, Traffic.ts >= start)
-        .group_by(Traffic.ts)
-        .order_by(Traffic.ts)
-        .limit(20_000)
-    )
-    if session_id:
-        stmt = stmt.where(Traffic.session_id == session_id)
+
+    def query(res: int, bucket: Any) -> Any:
+        stmt = (
+            select(bucket.label("ts"), *(func.sum(getattr(Traffic, c)).label(c) for c in _COUNTERS))
+            .where(Traffic.resolution == res, Traffic.ts >= start)
+            .group_by(bucket)
+            .order_by(bucket)
+            .limit(20_000)
+        )
+        return stmt.where(Traffic.session_id == session_id) if session_id else stmt
+
+    def rows(stmt: Any) -> dict[int, Bucket]:
+        return {
+            int(r.ts): Bucket(ts=int(r.ts), **{c: int(getattr(r, c)) for c in _COUNTERS})
+            for r in s.execute(stmt)
+        }
+
     with db.session() as s:
-        return [
-            Bucket(ts=r.ts, **{c: int(getattr(r, c)) for c in _COUNTERS}) for r in s.execute(stmt)
-        ]
+        if resolution == 1:
+            return list(rows(query(1, Traffic.ts)).values())
+        minutes = rows(query(1, (Traffic.ts // 60) * 60))
+        minutes.update(rows(query(60, Traffic.ts)))
+        return [minutes[ts] for ts in sorted(minutes)]
 
 
 class Summary(BaseModel):

@@ -360,6 +360,10 @@ export interface paths {
          * Timeseries
          * @description Traffic per second (resolution=1, last 24 h) or per minute (resolution=60), summed over
          *     sessions unless one is given. Replays keep their original timestamps; pass their session.
+         *
+         *     Per-minute rows are written by the retention roll-up, which only covers complete minutes and
+         *     lags behind capture, so minutes it hasn't reached yet are built from per-second rows. Where
+         *     both exist the roll-up wins (its seconds may already have expired).
          */
         get: operations["timeseries_api_stats_timeseries_get"];
         put?: never;
@@ -614,6 +618,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/models/{version}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Model Report
+         * @description The model's evaluation report (per-family results, confusion matrix, threshold sweep).
+         */
+        get: operations["model_report_api_models__version__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -683,6 +707,21 @@ export interface components {
             status?: ("new" | "acknowledged" | "resolved" | "false_positive") | null;
             /** Note */
             note?: string | null;
+        };
+        /** AuditEntry */
+        AuditEntry: {
+            /** Ts */
+            ts: number;
+            /** Actor */
+            actor: string;
+            /** Action */
+            action: string;
+            /** Target */
+            target: string | null;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            } | null;
         };
         /** AuthStatus */
         AuthStatus: {
@@ -840,6 +879,13 @@ export interface components {
             };
             /** Created By */
             created_by: string;
+        };
+        /** LogTail */
+        LogTail: {
+            /** Source */
+            source: string;
+            /** Lines */
+            lines: string[];
         };
         /** ModelOut */
         ModelOut: {
@@ -1737,7 +1783,8 @@ export interface operations {
     timeseries_api_stats_timeseries_get: {
         parameters: {
             query?: {
-                resolution?: 1 | 60;
+                /** @description Bucket length in seconds: 1 or 60 */
+                resolution?: number;
                 /** @description Epoch seconds; default: last 15 min */
                 since?: number | null;
                 session_id?: string | null;
@@ -2124,9 +2171,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["LogTail"];
                 };
             };
             /** @description Validation Error */
@@ -2157,9 +2202,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["AuditEntry"][];
                 };
             };
             /** @description Validation Error */
@@ -2244,6 +2287,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: null;
                     };
+                };
+            };
+        };
+    };
+    model_report_api_models__version__report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

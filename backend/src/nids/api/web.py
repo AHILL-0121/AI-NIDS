@@ -47,6 +47,18 @@ def page_csp(path: str, mtime: float) -> str:
     )
 
 
+def segment_file(candidate: Path) -> Path | None:
+    """Next.js prefetches route segments as `__next.<a>.<b>.__PAGE__.txt` but the static export
+    writes them nested (`__next.<a>/<b>/__PAGE__.txt`). Segment names never contain dots."""
+    name = candidate.name
+    if not (name.startswith("__next.") and name.endswith(".txt")):
+        return None
+    head, *rest = name.removeprefix("__next.").removesuffix(".txt").split(".")
+    if not rest or not all(rest):
+        return None
+    return candidate.parent.joinpath(f"__next.{head}", *rest[:-1], f"{rest[-1]}.txt")
+
+
 def install(app: FastAPI, frontend_dir: Path | None, secure: bool) -> None:
     @app.middleware("http")
     async def harden(
@@ -80,7 +92,8 @@ def install(app: FastAPI, frontend_dir: Path | None, secure: bool) -> None:
         return
     root = frontend_dir.resolve()
 
-    @app.get("/{path:path}", include_in_schema=False)
+    # HEAD too: the Next.js router probes pages with HEAD before client-side navigation.
+    @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     def frontend(path: str) -> Response:
         if path.startswith("api/"):
             return JSONResponse(
@@ -93,6 +106,10 @@ def install(app: FastAPI, frontend_dir: Path | None, secure: bool) -> None:
             candidate = candidate / "index.html"
         elif not candidate.exists() and candidate.with_suffix(".html").exists():
             candidate = candidate.with_suffix(".html")
+        elif not candidate.exists() and (segment := segment_file(candidate)) is not None:
+            candidate = segment.resolve()
+            if root not in candidate.parents:
+                candidate = root / "__outside__"
         status = 200
         if not candidate.is_file():
             candidate, status = root / "404.html", 404
