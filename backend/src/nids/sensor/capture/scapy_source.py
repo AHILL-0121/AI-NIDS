@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from nids.sensor.capture.base import CaptureError, FlowSink
+from nids.sensor.detect.base import PacketObserver
 from nids.sensor.flows import FlowTable, FlowTableConfig
 from nids.sensor.packets import load_protocol_layers, parse_packet
 
@@ -39,7 +40,13 @@ def _metrics(counters: _Counters, table: FlowTable | None) -> dict[str, int | fl
     return data
 
 
-def _feed(table: FlowTable, counters: _Counters, packet: Any) -> float | None:
+def _table(emit: FlowSink, config: FlowTableConfig, observer: PacketObserver | None) -> FlowTable:
+    return FlowTable(emit, config, on_new_flow=observer.on_new_flow if observer else None)
+
+
+def _feed(
+    table: FlowTable, counters: _Counters, packet: Any, observer: PacketObserver | None
+) -> float | None:
     """Parse one packet into the table. Returns its timestamp, or None if it was skipped."""
     counters.packets_seen += 1
     try:
@@ -50,6 +57,8 @@ def _feed(table: FlowTable, counters: _Counters, packet: Any) -> float | None:
     if meta is None:
         counters.packets_non_ip += 1
         return None
+    if observer is not None:
+        observer.on_packet(meta)
     table.add(meta)
     return meta.ts
 
@@ -68,10 +77,12 @@ class PcapReplaySource:
         path: str | Path,
         config: FlowTableConfig | None = None,
         speed: Literal["max", "realtime"] = "max",
+        observer: PacketObserver | None = None,
     ) -> None:
         self.path = Path(path)
         self.config = config or FlowTableConfig()
         self.speed = speed
+        self.observer = observer
         self._counters = _Counters()
         self._table: FlowTable | None = None
 
@@ -84,7 +95,7 @@ class PcapReplaySource:
         load_protocol_layers()
         if not self.path.is_file():
             raise CaptureError(f"PCAP file not found: {self.path}")
-        table = self._table = FlowTable(emit, self.config)
+        table = self._table = _table(emit, self.config, self.observer)
         last_sweep: float | None = None
         previous_ts: float | None = None
         try:
@@ -102,15 +113,19 @@ class PcapReplaySource:
                         break
                 previous_ts = float(packet.time)
 
-                ts = _feed(table, self._counters, packet)
+                ts = _feed(table, self._counters, packet, self.observer)
                 if ts is None:
                     continue
                 if last_sweep is None:
                     last_sweep = ts
                 elif ts - last_sweep >= EXPIRE_EVERY:
                     table.expire(ts)
+                    if self.observer is not None:
+                        self.observer.tick(ts)
                     last_sweep = ts
         table.flush()
+        if self.observer is not None:
+            self.observer.flush()
         log.info("Replay of %s finished: %s", self.path.name, self.metrics())
 
 
@@ -131,8 +146,10 @@ class LiveScapySource:
         config: FlowTableConfig | None = None,
         bpf_filter: str | None = None,
         queue_size: int = 50_000,
+        observer: PacketObserver | None = None,
     ) -> None:
         self.interface = interface
+        self.observer = observer
         self.config = config or FlowTableConfig()
         self.bpf_filter = bpf_filter
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=queue_size)
@@ -154,7 +171,7 @@ class LiveScapySource:
         from scapy.sendrecv import AsyncSniffer
 
         load_protocol_layers()
-        table = self._table = FlowTable(emit, self.config)
+        table = self._table = _table(emit, self.config, self.observer)
         started = threading.Event()
         sniffer = AsyncSniffer(
             iface=self.interface,
@@ -179,10 +196,12 @@ class LiveScapySource:
                 except queue.Empty:
                     packet = None
                 if packet is not None:
-                    _feed(table, self._counters, packet)
+                    _feed(table, self._counters, packet, self.observer)
                 now = time.time()
                 if now - last_sweep >= EXPIRE_EVERY:
                     table.expire(now)
+                    if self.observer is not None:
+                        self.observer.tick(now)
                     last_sweep = now
         finally:
             if sniffer.running:
@@ -191,8 +210,10 @@ class LiveScapySource:
                 except Exception:
                     log.exception("Error while stopping the sniffer")
             while not self._queue.empty():
-                _feed(table, self._counters, self._queue.get_nowait())
+                _feed(table, self._counters, self._queue.get_nowait(), self.observer)
             table.flush()
+            if self.observer is not None:
+                self.observer.flush()
             log.info("Live capture on %s stopped: %s", self.interface, self.metrics())
 
     @staticmethod

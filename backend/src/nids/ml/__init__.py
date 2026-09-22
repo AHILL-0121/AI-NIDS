@@ -1,1 +1,4 @@
-"""Offline dataset loading, training, evaluation and the model registry (Phase 2)."""
+"""Offline ML: dataset preparation, training, evaluation, model artifacts (Phase 2).
+
+Needs the `ml` extra: `uv sync --extra ml`.
+"""

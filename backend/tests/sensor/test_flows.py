@@ -21,16 +21,19 @@ def reply(ts: float, **kw: object) -> object:
 def test_both_directions_form_one_flow_with_initiator_as_forward(collect: Collect) -> None:
     flows, sink = collect
     table = FlowTable(sink)
-    table.add(meta(0.0, length=100))
-    table.add(reply(0.1, length=300))  # type: ignore[arg-type]
-    table.add(meta(0.3, length=200))
+    table.add(meta(0.0, length=140, payload=100))
+    table.add(reply(0.1, length=340, payload=300))  # type: ignore[arg-type]
+    table.add(meta(0.3, length=240, payload=200))
     table.flush()
 
     (flow,) = flows
     assert (flow.src_ip, flow.src_port, flow.dst_ip, flow.dst_port) == (CLIENT, 40000, SERVER, 443)
     assert (flow.fwd.packets, flow.bwd.packets) == (2, 1)
-    assert (flow.fwd.bytes, flow.bwd.bytes) == (300, 300)
-    assert flow.fwd.pkt_len_mean == 150 and flow.fwd.pkt_len_std == 50
+    assert (flow.fwd.payload_bytes, flow.bwd.payload_bytes) == (300, 300)
+    assert (flow.fwd.ip_bytes, flow.bwd.ip_bytes) == (380, 340)
+    # Payload length stats with a sample (n-1) standard deviation, as in CICFlowMeter.
+    assert flow.fwd.payload_len_mean == 150
+    assert flow.fwd.payload_len_std == pytest.approx(70.7107, rel=1e-4)
     assert flow.duration == pytest.approx(0.3)
     assert flow.iat_min == pytest.approx(0.1) and flow.iat_max == pytest.approx(0.2)
     assert flow.fwd.iat_mean == pytest.approx(0.3)  # one gap in the forward direction
@@ -177,9 +180,11 @@ def test_every_packet_ends_up_in_exactly_one_flow(packets: list[tuple], max_flow
     table.flush()
 
     assert sum(f.packets for f in flows) == len(packets)
-    assert sum(f.bytes for f in flows) == total_bytes
+    assert sum(f.ip_bytes or 0 for f in flows) == total_bytes
     assert len(table) == 0
     for f in flows:
         assert f.packets >= 1 and f.fwd.packets >= 1  # the initiator sent at least one packet
         assert f.last_seen >= f.first_seen
-        assert all(math.isfinite(v) for v in (f.iat_mean, f.iat_std, f.fwd.pkt_len_std))
+        assert all(
+            math.isfinite(v) for v in (f.iat_mean, f.iat_std, f.fwd.payload_len_std, f.fwd.iat_std)
+        )

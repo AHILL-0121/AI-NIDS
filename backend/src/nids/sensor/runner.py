@@ -16,6 +16,7 @@ from nids.sensor.capture import (
     PcapReplaySource,
     nfstream_available,
 )
+from nids.sensor.detect.base import PacketObserver
 from nids.sensor.flows import FlowTableConfig
 
 log = logging.getLogger(__name__)
@@ -28,13 +29,14 @@ def build_live_source(
     backend: Backend = "auto",
     config: FlowTableConfig | None = None,
     bpf_filter: str | None = None,
+    observer: PacketObserver | None = None,
 ) -> FlowSource:
     if backend == "auto":
         use_nfstream = platform.system() == "Linux" and nfstream_available()
         backend = "nfstream" if use_nfstream else "scapy"
     if backend == "nfstream":
-        return NfstreamSource(interface, config, bpf_filter)
-    return LiveScapySource(interface, config, bpf_filter)
+        return NfstreamSource(interface, config, bpf_filter, observer=observer)
+    return LiveScapySource(interface, config, bpf_filter, observer=observer)
 
 
 def build_replay_source(
@@ -42,10 +44,11 @@ def build_replay_source(
     backend: Literal["nfstream", "scapy"] = "scapy",
     config: FlowTableConfig | None = None,
     speed: Literal["max", "realtime"] = "max",
+    observer: PacketObserver | None = None,
 ) -> FlowSource:
     if backend == "nfstream":
-        return NfstreamSource(pcap, config)
-    return PcapReplaySource(pcap, config, speed)
+        return NfstreamSource(pcap, config, observer=observer)
+    return PcapReplaySource(pcap, config, speed, observer=observer)
 
 
 class JsonlSink:

@@ -4,8 +4,8 @@ Replaces v1's global 100-packet window (audit ML-08) and its never-evicted per-I
 (audit CAP-05).
 
 How a flow ends:
+- active timeout: the flow has lasted `active_timeout` seconds (long flows are split);
 - idle timeout: no packet for `idle_timeout` seconds;
-- active timeout: the flow has lasted longer than `active_timeout` (long flows are split);
 - TCP close: after a FIN has been seen in *both* directions, or after an RST. The flow lingers for
   `tcp_close_linger` seconds so the trailing ACKs are counted in it instead of starting a tiny new
   flow. Closing on the first FIN is the CICFlowMeter bug documented by Engelen et al. (2021);
@@ -13,6 +13,10 @@ How a flow ends:
 - flush: capture stopped.
 
 All timing uses packet timestamps, so replaying a PCAP gives the same flows every time.
+
+The defaults match CICFlowMeter, which produced the CIC-IDS2017 training data: flows end after
+120 s, with no separate shorter idle timeout. Live flows must be cut the same way as training
+flows, or features like duration and packet counts mean different things at inference time.
 """
 
 import itertools
@@ -29,7 +33,7 @@ FlowKey = tuple[int, str, int, str, int]
 
 @dataclass(frozen=True, slots=True)
 class FlowTableConfig:
-    idle_timeout: float = 15.0
+    idle_timeout: float = 120.0
     active_timeout: float = 120.0
     tcp_close_linger: float = 1.0
     max_flows: int = 100_000
@@ -49,7 +53,10 @@ class FlowTableStats:
 
 
 class _RunningStats:
-    """Welford's online mean/variance, plus min and max."""
+    """Welford's online mean/variance, plus min and max.
+
+    `std` is the sample standard deviation (n-1), as in CICFlowMeter (Apache Commons Math).
+    """
 
     __slots__ = ("m2", "max", "mean", "min", "n")
 
@@ -69,8 +76,8 @@ class _RunningStats:
         self.max = max(self.max, x)
 
     @property
-    def std(self) -> float:  # population standard deviation
-        return math.sqrt(self.m2 / self.n) if self.n else 0.0
+    def std(self) -> float:
+        return math.sqrt(self.m2 / (self.n - 1)) if self.n > 1 else 0.0
 
     def summary(self) -> tuple[float, float, float, float]:
         if not self.n:
@@ -81,12 +88,12 @@ class _RunningStats:
 class _Direction:
     __slots__ = (
         "ack",
-        "bytes",
         "fin",
         "iat",
+        "ip_bytes",
         "last_ts",
-        "lengths",
         "payload",
+        "payload_total",
         "psh",
         "rst",
         "syn",
@@ -94,9 +101,9 @@ class _Direction:
     )
 
     def __init__(self) -> None:
-        self.bytes = self.payload = 0
+        self.ip_bytes = self.payload_total = 0
         self.syn = self.fin = self.rst = self.psh = self.ack = self.urg = 0
-        self.lengths = _RunningStats()
+        self.payload = _RunningStats()
         self.iat = _RunningStats()
         self.last_ts: float | None = None
 
@@ -104,9 +111,9 @@ class _Direction:
         if self.last_ts is not None:
             self.iat.add(max(0.0, pkt.ts - self.last_ts))
         self.last_ts = pkt.ts
-        self.bytes += pkt.length
-        self.payload += pkt.payload_len
-        self.lengths.add(pkt.length)
+        self.ip_bytes += pkt.length
+        self.payload.add(pkt.payload_len)
+        self.payload_total += pkt.payload_len
         f = pkt.tcp_flags
         self.syn += bool(f & SYN)
         self.fin += bool(f & FIN)
@@ -116,16 +123,22 @@ class _Direction:
         self.urg += bool(f & URG)
 
     def to_stats(self) -> DirectionStats:
-        lo, hi, mean, std = self.lengths.summary()
+        lo, hi, mean, std = self.payload.summary()
+        iat_min, iat_max, iat_mean, iat_std = self.iat.summary()
+        packets = self.payload.n
         return DirectionStats(
-            packets=self.lengths.n,
-            bytes=self.bytes,
-            payload_bytes=self.payload,
-            pkt_len_min=lo,
-            pkt_len_max=hi,
-            pkt_len_mean=mean,
-            pkt_len_std=std,
-            iat_mean=self.iat.mean if self.iat.n else 0.0,
+            packets=packets,
+            payload_bytes=self.payload_total,
+            payload_len_min=lo,
+            payload_len_max=hi,
+            payload_len_mean=mean,
+            payload_len_std=std,
+            iat_mean=iat_mean,
+            iat_std=iat_std,
+            iat_min=iat_min,
+            iat_max=iat_max,
+            ip_bytes=self.ip_bytes,
+            ip_len_mean=self.ip_bytes / packets if packets else 0.0,
             syn=self.syn,
             fin=self.fin,
             rst=self.rst,
@@ -216,10 +229,12 @@ class FlowTable:
         self,
         on_flow: Callable[[FlowRecord], None],
         config: FlowTableConfig | None = None,
+        on_new_flow: Callable[[PacketMeta, str], None] | None = None,
     ) -> None:
         self.config = config or FlowTableConfig()
         self.stats = FlowTableStats()
         self._on_flow = on_flow
+        self._on_new_flow = on_new_flow  # sees each flow's first packet (scan detection)
         self._flows: OrderedDict[FlowKey, _Flow] = OrderedDict()  # least recently active first
         self._ids = itertools.count(1)
 
@@ -250,6 +265,8 @@ class FlowTable:
             self._flows[key] = flow
             self.stats.flows_created += 1
             flow.add(pkt, first=True)
+            if self._on_new_flow is not None:
+                self._on_new_flow(pkt, flow.flow_id)
         else:
             self._flows.move_to_end(key)
             flow.add(pkt, first=False)

@@ -66,7 +66,9 @@ def test_cli_replay_writes_json_lines(sample_pcap: Path, tmp_path: Path) -> None
     assert result.exit_code == 0, result.output
     rows = [json.loads(line) for line in out.read_text().splitlines()]
     assert len(rows) == 4
-    assert {"src_ip", "fwd_packets", "bwd_bytes", "end_reason", "duration"} <= rows[0].keys()
+    assert {"src_ip", "fwd_packets", "bwd_payload_bytes", "end_reason", "duration"} <= rows[
+        0
+    ].keys()
 
 
 def test_cli_replay_rejects_bad_speed(sample_pcap: Path) -> None:
