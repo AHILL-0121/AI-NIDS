@@ -160,6 +160,7 @@ function ReportView({ report }: { report: ModelReport }) {
     ([, m]) => m.support > 0,
   );
   const families = Object.entries(report.per_family ?? {});
+  const known = report.multiclass?.known_families ?? [];
   const matrix = report.multiclass?.confusion_matrix;
 
   return (
@@ -188,7 +189,11 @@ function ReportView({ report }: { report: ModelReport }) {
         <Kpi
           label="Macro-F1"
           value={fixed(report.multiclass?.macro_f1_known_families)}
-          detail="families seen in training"
+          detail={
+            known.length === 1 && known[0]
+              ? `only ${known[0]} in both splits`
+              : "families seen in training"
+          }
         />
       </section>
 

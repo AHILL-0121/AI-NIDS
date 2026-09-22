@@ -274,6 +274,14 @@ def replay(
     label: Annotated[
         str | None, typer.Option(help="Name shown for the session (default: the file name).")
     ] = None,
+    now: Annotated[
+        bool,
+        typer.Option(
+            "--now",
+            help="Shift packet times to the present: the capture ends now (max speed) "
+            "or starts now (realtime). For demos.",
+        ),
+    ] = False,
 ) -> None:
     """Stream a PCAP file through flow assembly, detection and storage."""
     from nids.sensor.flows import FlowTableConfig
@@ -281,6 +289,8 @@ def replay(
 
     if speed not in ("max", "realtime") or backend not in ("scapy", "nfstream"):
         raise typer.BadParameter("speed must be max|realtime and backend scapy|nfstream")
+    if now and backend == "nfstream":
+        raise typer.BadParameter("--now needs --backend scapy")
     config = FlowTableConfig(idle_timeout=idle_timeout, active_timeout=active_timeout)
 
     def factory(observer: "PacketObserver") -> "FlowSource":
@@ -290,6 +300,7 @@ def replay(
             config=config,
             speed=cast(Literal["max", "realtime"], speed),
             observer=observer,
+            shift_to_now=now,
         )
 
     _run(

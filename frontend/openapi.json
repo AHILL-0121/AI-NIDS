@@ -3453,6 +3453,11 @@
             "type": "boolean",
             "title": "Use Model",
             "default": true
+          },
+          "shift_to_now": {
+            "type": "boolean",
+            "title": "Shift To Now",
+            "default": false
           }
         },
         "additionalProperties": false,

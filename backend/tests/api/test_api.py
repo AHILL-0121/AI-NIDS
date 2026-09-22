@@ -300,6 +300,31 @@ def test_replay_job_runs_in_a_subprocess_and_stores_results(
     assert any("Port scan" in line for line in log)
 
 
+def test_replay_job_can_shift_the_capture_to_now(client: TestClient, tmp_path: Path) -> None:
+    token = sign_in(client)
+    pcap = write_scan_pcap(tmp_path / "scan.pcap")  # packets from 1970
+    upload = client.post(
+        "/api/uploads", files={"file": ("scan.pcap", pcap.read_bytes())}, headers=csrf(token)
+    ).json()
+
+    job = client.post(
+        "/api/jobs",
+        json={"kind": "replay", "upload_id": upload["id"], "shift_to_now": True},
+        headers=csrf(token),
+    ).json()
+    deadline = time.time() + 120
+    while (current := client.get(f"/api/jobs/{job['id']}").json())[
+        "status"
+    ] == "running" and time.time() < deadline:
+        time.sleep(0.5)
+
+    assert current["status"] == "done"
+    alert = client.get(
+        "/api/alerts", params={"session_id": current["result"]["session_id"]}
+    ).json()["items"][0]
+    assert abs(alert["last_seen"] - time.time()) < 120
+
+
 def test_job_requests_are_validated(client: TestClient) -> None:
     token = sign_in(client)
 

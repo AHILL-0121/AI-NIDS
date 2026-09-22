@@ -1241,6 +1241,11 @@ export interface components {
              * @default true
              */
             use_model: boolean;
+            /**
+             * Shift To Now
+             * @default false
+             */
+            shift_to_now: boolean;
         };
         /** ReportJob */
         ReportJob: {

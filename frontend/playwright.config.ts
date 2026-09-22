@@ -14,6 +14,7 @@ const PORT = Number(process.env.E2E_PORT ?? 8766);
 // One fresh data directory per run; workers inherit the variable, so they agree on it.
 process.env.E2E_RUN ??= String(Date.now());
 const dataDir = path.join(tmpdir(), `nids-e2e-${process.env.E2E_RUN}`);
+process.env.NIDS_E2E_DATA_DIR = dataDir;
 export const AUTH_FILE = path.join(dataDir, "admin.json");
 const channel = process.platform === "win32" ? "msedge" : undefined;
 
@@ -43,6 +44,13 @@ export default defineConfig({
     {
       name: "a11y",
       testMatch: "a11y.e2e.ts",
+      dependencies: ["app"],
+      use: { storageState: AUTH_FILE },
+    },
+    // README images, only on request (`npm run screenshots`): `npm run e2e` selects a11y.
+    {
+      name: "screenshots",
+      testMatch: "screenshots.e2e.ts",
       dependencies: ["app"],
       use: { storageState: AUTH_FILE },
     },

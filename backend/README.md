@@ -19,6 +19,7 @@ uv run nids --help           # list commands
 uv run nids doctor           # can this machine capture? what to fix if not
 uv run nids interfaces       # capture interfaces (use the --interface value shown)
 uv run nids replay file.pcap -o flows.jsonl --alerts alerts.jsonl   # PCAP -> flows + alerts
+uv run nids replay file.pcap --now   # as if captured just now, so live views show it (demos)
 uv run nids sensor -i "<interface>" --alerts alerts.jsonl [--model artifacts/<version>]
                              # live capture + detection; Ctrl+C flushes and stops
 uv run nids api              # API on http://127.0.0.1:8000 (GET /healthz, /api/sensor/*)

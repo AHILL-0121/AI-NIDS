@@ -12,8 +12,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "gen:api": "openapi-typescript openapi.json -o src/lib/api/schema.d.ts",
-    "e2e": "next build && playwright test",
-    "e2e:only": "playwright test",
+    "e2e": "next build && playwright test --project=a11y",
+    "e2e:only": "playwright test --project=a11y",
+    "screenshots": "next build && playwright test --project=screenshots",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {

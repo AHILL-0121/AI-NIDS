@@ -107,7 +107,12 @@ export function endpoint(ip: string | null | undefined, port?: number | null): s
   return ip.includes(":") ? `[${ip}]:${port}` : `${ip}:${port}`;
 }
 
+const ACRONYMS: Record<string, string> = { ddos: "DDoS", dos: "DoS" };
+
 export function humanize(identifier: string): string {
-  const text = identifier.replace(/_/g, " ");
+  const text = identifier
+    .split("_")
+    .map((word) => ACRONYMS[word] ?? word)
+    .join(" ");
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

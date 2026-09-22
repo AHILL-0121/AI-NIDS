@@ -151,6 +151,7 @@ function Uploads() {
   const upload = useUploadPcap();
   const notify = useToast();
   const [useModel, setUseModel] = useState(true);
+  const [shiftToNow, setShiftToNow] = useState(false);
   const start = useStartJob();
 
   const send = (files: File[]) => {
@@ -161,7 +162,7 @@ function Uploads() {
 
   const replay = (u: Upload) =>
     start.mutate(
-      { kind: "replay", upload_id: u.id, use_model: useModel },
+      { kind: "replay", upload_id: u.id, use_model: useModel, shift_to_now: shiftToNow },
       {
         onSuccess: () =>
           notify(`Replaying ${u.filename}. Results appear under Sessions and Alerts.`, {
@@ -207,6 +208,9 @@ function Uploads() {
       <FormError error={upload.error ?? start.error} />
       <Switch isSelected={useModel} onChange={setUseModel}>
         Use the active model while replaying
+      </Switch>
+      <Switch isSelected={shiftToNow} onChange={setShiftToNow}>
+        Replay as if captured just now (for demos: live views show only recent traffic)
       </Switch>
       <QueryView
         query={uploads}

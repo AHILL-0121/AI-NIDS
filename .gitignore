@@ -2,6 +2,9 @@
 *.env
 *.md
 !README.md
+!docs/**/*.md
+!.github/*.md
+/docs/adr/
 /plan
 
 # --- Secrets ---

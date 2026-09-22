@@ -17,6 +17,7 @@ npm test             # vitest
 npm run test:coverage  # vitest with the components >= 70 % gate
 npm run format       # prettier
 npm run e2e          # build, then Playwright against the real backend (see below)
+npm run screenshots  # regenerate the README images in ../docs/images (both themes)
 ```
 
 ## End-to-end and accessibility tests
@@ -43,6 +44,6 @@ src/
 tests/e2e/      Playwright specs (full stack)
 ```
 
-The design spec lives in `plan/design.md` §5. Static export rules: no server-side dynamic routes,
+The design system's tokens are in `src/design/tokens.css`. Static export rules: no server-side dynamic routes,
 route handlers, cookies or rewrites in production. Use client-side data fetching and query params
 for detail views.

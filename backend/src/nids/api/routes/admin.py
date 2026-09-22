@@ -204,6 +204,7 @@ class ReplayJob(BaseModel):
     kind: Literal["replay"]
     upload_id: str = Field(pattern=r"^[0-9a-f]{16}$")
     use_model: bool = True  # the active model, if one is active
+    shift_to_now: bool = False  # replay as if captured just now (demos; `nids replay --now`)
 
 
 class TrainJob(BaseModel):
@@ -255,6 +256,7 @@ def start_job(
         params = {
             "upload_id": body.upload_id,
             "model_version": active_version(db) if body.use_model else None,
+            "shift_to_now": body.shift_to_now,
         }
     job = request.app.state.supervisor.start(body.kind, params, principal.username)
     return JobOut.model_validate(job)

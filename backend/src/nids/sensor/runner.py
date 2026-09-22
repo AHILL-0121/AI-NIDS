@@ -45,10 +45,13 @@ def build_replay_source(
     config: FlowTableConfig | None = None,
     speed: Literal["max", "realtime"] = "max",
     observer: PacketObserver | None = None,
+    shift_to_now: bool = False,
 ) -> FlowSource:
     if backend == "nfstream":
+        if shift_to_now:
+            raise ValueError("Shifting timestamps to now needs the scapy replay backend.")
         return NfstreamSource(pcap, config, observer=observer)
-    return PcapReplaySource(pcap, config, speed, observer=observer)
+    return PcapReplaySource(pcap, config, speed, observer=observer, shift_to_now=shift_to_now)
 
 
 class JsonlSink:

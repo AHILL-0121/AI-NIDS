@@ -1,0 +1,28 @@
+name: Bug report
+description: Something doesn't work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Commands, the page you were on, or a small PCAP that triggers it.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, how you run it (Docker or native), and the output of `uv run nids doctor`.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: From System → logs, or `data/logs/api.log`. Remove any addresses you don't want to share.
+      render: text

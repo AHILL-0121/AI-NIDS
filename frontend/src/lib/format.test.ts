@@ -50,5 +50,7 @@ describe("format", () => {
     expect(endpoint("10.0.0.1", 0)).toBe("10.0.0.1");
     expect(endpoint(null)).toBe("*");
     expect(humanize("false_positive")).toBe("False positive");
+    expect(humanize("ddos")).toBe("DDoS");
+    expect(humanize("dos")).toBe("DoS");
   });
 });

@@ -115,6 +115,7 @@ class Supervisor:
                 "replay",
                 str(path),
                 f"--label={name}",
+                *(["--now"] if params.get("shift_to_now") else []),
                 *self._model_args(params.get("model_version")),
             ]
         if kind == "train":
