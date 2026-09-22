@@ -1,0 +1,7 @@
+# Store text with LF in the repo and check it out as LF on every OS (matches .editorconfig).
+* text=auto eol=lf
+
+*.ico binary
+*.png binary
+*.pcap binary
+*.pcapng binary

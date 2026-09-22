@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 
 from nids import __version__
+from nids.api.routes import sensor
 
 
 def create_app() -> FastAPI:
@@ -12,4 +13,5 @@ def create_app() -> FastAPI:
     def healthz() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
 
+    app.include_router(sensor.router)
     return app

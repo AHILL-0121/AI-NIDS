@@ -39,6 +39,7 @@ dev = [
     "pytest-cov>=6.0",
     "hypothesis>=6.120",
     "httpx>=0.28",
+    "scapy>=2.6",
     "ruff>=0.8",
     "mypy>=1.13",
 ]
@@ -59,6 +60,9 @@ src = ["src", "tests"]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
 ignore = ["S101"]  # assert is fine in tests
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S603"]  # tests run fixed commands, e.g. the CLI in a fresh interpreter
+
 [tool.mypy]
 python_version = "3.12"
 mypy_path = "src"
@@ -67,8 +71,12 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
-module = ["nids.core.*"]
+module = ["nids.core.*", "nids.sensor.flows", "nids.sensor.packets"]
 strict = true
+
+[[tool.mypy.overrides]]
+module = ["scapy.*", "nfstream.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
