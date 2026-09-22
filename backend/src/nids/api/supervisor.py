@@ -9,6 +9,7 @@ Stopping is graceful: SIGINT (POSIX) or CTRL_BREAK (Windows) makes the CLI flush
 close its session before exiting; after a timeout the process is killed.
 """
 
+import json
 import logging
 import os
 import re
@@ -29,11 +30,12 @@ from nids.store.repo import audit
 
 log = logging.getLogger(__name__)
 
-JobKind = Literal["sensor", "replay", "train", "prepare"]
+JobKind = Literal["sensor", "replay", "train", "prepare", "report"]
 DATASETS = ("cicids2017", "unsw-nb15")
 _WINDOWS = sys.platform == "win32"
 _MODEL_SAVED = re.compile(r"Saved model to (\S+)")
 _SESSION = re.compile(r'"session": "([0-9a-f]+)"')
+_REPORT = re.compile(r"^Report written: (\{.*\})\s*$", re.M)
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,7 @@ class Supervisor:
         self.data_dir = Path(settings.data_dir)
         self.jobs_dir = self.data_dir / "jobs"
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
+        self.reports_dir = self.data_dir / "reports"
         self._procs: dict[str, subprocess.Popen[bytes]] = {}
         self._lock = threading.Lock()
 
@@ -85,7 +88,7 @@ class Supervisor:
 
         return ["--model", str(model_path(self.db, self.settings, model_version))]
 
-    def _args(self, kind: JobKind, params: dict[str, Any]) -> list[str]:
+    def _args(self, kind: JobKind, params: dict[str, Any], job_id: str) -> list[str]:
         if kind == "sensor":
             args = [
                 "sensor",
@@ -120,6 +123,18 @@ class Supervisor:
         if kind == "prepare":
             src = self.data_dir / "raw" / params["dataset"]
             return ["data", "prepare", params["dataset"], "--src", str(src)]
+        if kind == "report":
+            with self.db.session() as s:
+                if s.get(CaptureSession, params["session_id"]) is None:
+                    raise ApiError(404, f"Session {params['session_id']} not found.")
+            out = self.reports_dir / job_id  # the report is stored under its job's id
+            return [
+                "report",
+                params["session_id"],
+                "--out",
+                str(out),
+                "--pdf" if params.get("pdf", True) else "--no-pdf",
+            ]
         raise ApiError(400, f"Unknown job kind '{kind}'.")
 
     def start(self, kind: JobKind, params: dict[str, Any], actor: str) -> Job:
@@ -130,8 +145,8 @@ class Supervisor:
                 raise ApiError(409, "The sensor is already running.")
             if kind != "sensor" and len(running) >= self.settings.max_concurrent_jobs:
                 raise ApiError(409, "Too many jobs are running. Wait for one to finish.")
-            args = self._args(kind, params)
             job_id = uuid.uuid4().hex[:16]
+            args = self._args(kind, params, job_id)
             log_path = self.jobs_dir / f"{job_id}.log"
             env = {
                 **os.environ,
@@ -225,6 +240,8 @@ class Supervisor:
             result["model_path"] = match.group(1)
         if match := _SESSION.search(text):
             result["session_id"] = match.group(1)
+        if match := _REPORT.search(text):
+            result.update(json.loads(match.group(1)))
         errors = [line for line in text.splitlines() if line.startswith("Error:")]
         if errors:
             result["error"] = errors[-1].removeprefix("Error:").strip()

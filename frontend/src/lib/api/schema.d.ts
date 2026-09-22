@@ -276,6 +276,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/alerts/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Alerts
+         * @description Every alert matching the filters (up to 100,000), as CSV or JSON. CSV cells that a
+         *     spreadsheet would run as a formula are prefixed with an apostrophe.
+         */
+        get: operations["export_alerts_api_alerts_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/alerts/{alert_id}": {
         parameters: {
             query?: never;
@@ -307,6 +328,27 @@ export interface paths {
         };
         /** List Flows */
         get: operations["list_flows_api_flows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/flows/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Flows
+         * @description Every flow matching the filters (up to 100,000), as CSV (summary columns) or JSON (with
+         *     every measured feature).
+         */
+        get: operations["export_flows_api_flows_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -561,6 +603,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Reports
+         * @description Reports, newest first (including ones still being generated).
+         */
+        get: operations["list_reports_api_reports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{report_id}/{fmt}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Report */
+        get: operations["download_report_api_reports__report_id___fmt__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{report_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Report */
+        delete: operations["delete_report_api_reports__report_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Notifications
+         * @description Current settings (the SMTP password and webhook secret are never returned) and the
+         *     result of the last delivery per channel.
+         */
+        get: operations["get_notifications_api_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Notifications
+         * @description Change some settings. Leave out `smtp_password` / `webhook_secret` to keep them; send ""
+         *     to clear one.
+         */
+        patch: operations["update_notifications_api_notifications_patch"];
+        trace?: never;
+    };
+    "/api/notifications/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Test
+         * @description Send a test message on one channel with the saved settings, even if it's turned off.
+         */
+        post: operations["send_test_api_notifications_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models": {
         parameters: {
             query?: never;
@@ -773,6 +915,15 @@ export interface components {
             /** Ok */
             readonly ok: boolean;
         };
+        /** ChannelStatus */
+        ChannelStatus: {
+            /** Last Ok At */
+            last_ok_at?: number | null;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Error At */
+            last_error_at?: number | null;
+        };
         /** Check */
         Check: {
             /** Name */
@@ -906,6 +1057,123 @@ export interface components {
             /** Active */
             active: boolean;
         };
+        /** NotificationSettings */
+        NotificationSettings: {
+            /**
+             * Email Enabled
+             * @default false
+             */
+            email_enabled: boolean;
+            /**
+             * Email Min Severity
+             * @default high
+             * @enum {string}
+             */
+            email_min_severity: "info" | "low" | "medium" | "high" | "critical";
+            /**
+             * Smtp Host
+             * @default
+             */
+            smtp_host: string;
+            /**
+             * Smtp Port
+             * @default 587
+             */
+            smtp_port: number;
+            /**
+             * Smtp Security
+             * @default starttls
+             * @enum {string}
+             */
+            smtp_security: "starttls" | "tls" | "none";
+            /**
+             * Smtp Username
+             * @default
+             */
+            smtp_username: string;
+            /**
+             * Smtp Password
+             * @default
+             */
+            smtp_password: string;
+            /**
+             * Email From
+             * @default
+             */
+            email_from: string;
+            /**
+             * Email To
+             * @default []
+             */
+            email_to: string[];
+            /**
+             * Webhook Enabled
+             * @default false
+             */
+            webhook_enabled: boolean;
+            /**
+             * Webhook Min Severity
+             * @default high
+             * @enum {string}
+             */
+            webhook_min_severity: "info" | "low" | "medium" | "high" | "critical";
+            /**
+             * Webhook Url
+             * @default
+             */
+            webhook_url: string;
+            /**
+             * Webhook Format
+             * @default json
+             * @enum {string}
+             */
+            webhook_format: "json" | "slack" | "discord";
+            /**
+             * Webhook Secret
+             * @default
+             */
+            webhook_secret: string;
+            /**
+             * Include Replays
+             * @default false
+             */
+            include_replays: boolean;
+            /**
+             * Max Per Hour
+             * @default 12
+             */
+            max_per_hour: number;
+            /**
+             * Digest Enabled
+             * @default false
+             */
+            digest_enabled: boolean;
+            /**
+             * Digest Hour
+             * @default 8
+             */
+            digest_hour: number;
+            /**
+             * Link Base Url
+             * @default http://127.0.0.1:8000
+             */
+            link_base_url: string;
+        };
+        /**
+         * NotificationSettingsOut
+         * @description What the API returns: the settings with secrets blanked, plus delivery status.
+         */
+        NotificationSettingsOut: {
+            values: components["schemas"]["NotificationSettings"];
+            /** Smtp Password Set */
+            smtp_password_set: boolean;
+            /** Webhook Secret Set */
+            webhook_secret_set: boolean;
+            /** Status */
+            status: {
+                [key: string]: components["schemas"]["ChannelStatus"];
+            };
+        };
         /** Page[AlertOut] */
         Page_AlertOut_: {
             /** Items */
@@ -973,6 +1241,42 @@ export interface components {
              * @default true
              */
             use_model: boolean;
+        };
+        /** ReportJob */
+        ReportJob: {
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "report";
+            /** Session Id */
+            session_id: string;
+            /**
+             * Pdf
+             * @default true
+             */
+            pdf: boolean;
+        };
+        /** ReportOut */
+        ReportOut: {
+            /** Id */
+            id: string;
+            /** Session Id */
+            session_id: string;
+            /** Status */
+            status: string;
+            /** Created At */
+            created_at: number;
+            /** Finished At */
+            finished_at: number | null;
+            /** Html */
+            html: boolean;
+            /** Pdf */
+            pdf: boolean;
+            /** Pdf Error */
+            pdf_error: string | null;
+            /** Error */
+            error: string | null;
         };
         /** RuleIn */
         RuleIn: {
@@ -1197,6 +1501,21 @@ export interface components {
             protocols_last_15m: {
                 [key: string]: number;
             };
+        };
+        /** TestRequest */
+        TestRequest: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "email" | "webhook";
+        };
+        /** TestResult */
+        TestResult: {
+            /** Ok */
+            ok: boolean;
+            /** Message */
+            message: string;
         };
         /** TrainJob */
         TrainJob: {
@@ -1612,6 +1931,46 @@ export interface operations {
             };
         };
     };
+    export_alerts_api_alerts_export_get: {
+        parameters: {
+            query?: {
+                format?: "csv" | "json";
+                severity?: ("info" | "low" | "medium" | "high" | "critical")[];
+                status?: ("new" | "acknowledged" | "resolved" | "false_positive")[];
+                type?: string[];
+                src?: string | null;
+                dst?: string | null;
+                since?: number | null;
+                until?: number | null;
+                session_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_alert_api_alerts__alert_id__get: {
         parameters: {
             query?: never;
@@ -1704,6 +2063,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_FlowOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_flows_api_flows_export_get: {
+        parameters: {
+            query?: {
+                format?: "csv" | "json";
+                session_id?: string | null;
+                /** @description Either endpoint */
+                ip?: string | null;
+                port?: number | null;
+                protocol?: number | null;
+                since?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2065,7 +2462,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReplayJob"] | components["schemas"]["TrainJob"] | components["schemas"]["PrepareJob"];
+                "application/json": components["schemas"]["ReplayJob"] | components["schemas"]["TrainJob"] | components["schemas"]["PrepareJob"] | components["schemas"]["ReportJob"];
             };
         };
         responses: {
@@ -2203,6 +2600,188 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditEntry"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_reports_api_reports_get: {
+        parameters: {
+            query?: {
+                session_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_report_api_reports__report_id___fmt__get: {
+        parameters: {
+            query?: {
+                /** @description Save instead of opening in the browser */
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                fmt: "html" | "pdf";
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_report_api_reports__report_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_notifications_api_notifications_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettingsOut"];
+                };
+            };
+        };
+    };
+    update_notifications_api_notifications_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_test_api_notifications_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestResult"];
                 };
             };
             /** @description Validation Error */

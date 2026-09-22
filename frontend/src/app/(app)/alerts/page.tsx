@@ -14,14 +14,14 @@ import {
   severityLabel,
   statusLabel,
 } from "@/components/Badges";
-import { Button } from "@/components/Button";
+import { Button, FileLink } from "@/components/Button";
 import { DataTable, Pager, columnHelper } from "@/components/DataTable";
 import { SearchField } from "@/components/Field";
 import { FilterChips } from "@/components/FilterChips";
 import { PageHeader, Panel } from "@/components/Panel";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/States";
 import { percent } from "@/lib/format";
-import { useAlerts, type Alert, type AlertStatus, type Severity } from "@/lib/queries";
+import { exportUrl, useAlerts, type Alert, type AlertStatus, type Severity } from "@/lib/queries";
 
 const PAGE = 200;
 const col = columnHelper<Alert>();
@@ -57,58 +57,6 @@ const columns = col.columns([
   col.accessor("last_seen", { header: "Seen", cell: (c) => <RelativeTime epoch={c.getValue()} /> }),
   col.accessor("status", { header: "Status", cell: (c) => <StatusBadge status={c.getValue()} /> }),
 ]);
-
-function csvCell(value: unknown): string {
-  const text = value === null || value === undefined ? "" : String(value);
-  // Neutralise spreadsheet formulas and quote everything.
-  const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  return `"${safe.replace(/"/g, '""')}"`;
-}
-
-function exportCsv(alerts: Alert[]) {
-  const header = [
-    "id",
-    "severity",
-    "type",
-    "title",
-    "src",
-    "dst",
-    "ports",
-    "occurrences",
-    "confidence",
-    "created_at",
-    "last_seen",
-    "status",
-    "mitre",
-  ];
-  const rows = alerts.map((a) =>
-    [
-      a.id,
-      a.severity,
-      a.type,
-      a.title,
-      a.src,
-      a.dst,
-      a.ports.join(" "),
-      a.occurrences,
-      a.confidence.toFixed(3),
-      new Date(a.created_at * 1000).toISOString(),
-      new Date(a.last_seen * 1000).toISOString(),
-      a.status,
-      a.mitre_technique,
-    ]
-      .map(csvCell)
-      .join(","),
-  );
-  const blob = new Blob([[header.join(","), ...rows].join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const link = Object.assign(document.createElement("a"), {
-    href: url,
-    download: `alerts-${Date.now()}.csv`,
-  });
-  link.click();
-  URL.revokeObjectURL(url);
-}
 
 function AlertsView() {
   const params = useSearchParams();
@@ -163,14 +111,15 @@ function AlertsView() {
           ) : undefined
         }
         actions={
-          <Button
-            size="dense"
-            icon={<DownloadSimpleIcon size={14} aria-hidden />}
-            isDisabled={!alerts.data?.items.length}
-            onPress={() => alerts.data && exportCsv(alerts.data.items)}
-          >
-            Export CSV
-          </Button>
+          // Server-side: every matching alert, not just the loaded page.
+          <div className="flex gap-2" role="group" aria-label="Export matching alerts">
+            <FileLink href={exportUrl("alerts", "csv", filters)} download>
+              <DownloadSimpleIcon size={14} aria-hidden /> CSV
+            </FileLink>
+            <FileLink href={exportUrl("alerts", "json", filters)} download>
+              <DownloadSimpleIcon size={14} aria-hidden /> JSON
+            </FileLink>
+          </div>
         }
       />
 

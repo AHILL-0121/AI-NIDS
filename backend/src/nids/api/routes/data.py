@@ -1,11 +1,16 @@
 """Alerts, flows, sessions and statistics: the data the dashboard reads."""
 
+import csv
+import io
+import json
 import time
+from collections.abc import Callable, Iterator
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import desc, func, select
+from sqlalchemy import Select, desc, func, select
 
 from nids.api.auth import Principal, get_db, require_user
 from nids.api.errors import ApiError
@@ -97,6 +102,148 @@ def list_alerts(
     )
 
 
+# --- exports (the whole filtered result, not one page) ---------------------------------------
+
+EXPORT_LIMIT = 100_000
+_CHUNK = 2_000
+
+
+def _csv_safe(value: Any) -> Any:
+    """Stop spreadsheets from running a cell as a formula (CSV injection)."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
+def _iso(epoch: float | None) -> str:
+    if epoch is None:
+        return ""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
+
+
+def _export(
+    db: Database,
+    stmt: Select[Any],
+    order: tuple[Any, ...],
+    fmt: Literal["csv", "json"],
+    columns: tuple[str, ...],
+    row_dict: Callable[[Any], dict[str, Any]],
+    name: str,
+) -> StreamingResponse:
+    """Stream rows in chunks (each read in its own short session), as CSV or a JSON array."""
+
+    def rows() -> Iterator[dict[str, Any]]:
+        for offset in range(0, EXPORT_LIMIT, _CHUNK):
+            with db.session() as s:
+                chunk = s.scalars(
+                    stmt.order_by(*order).limit(min(_CHUNK, EXPORT_LIMIT - offset)).offset(offset)
+                ).all()
+                items = [row_dict(r) for r in chunk]
+            yield from items
+            if len(chunk) < _CHUNK:
+                return
+
+    def as_csv() -> Iterator[str]:
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        for i, row in enumerate(rows(), 1):
+            writer.writerow({k: _csv_safe(v) for k, v in row.items()})
+            if i % 500 == 0:
+                yield buffer.getvalue()
+                buffer.seek(0)
+                buffer.truncate()
+        yield buffer.getvalue()
+
+    def as_json() -> Iterator[str]:
+        yield "["
+        for i, row in enumerate(rows()):
+            yield ("," if i else "") + "\n" + json.dumps(row)
+        yield "\n]\n"
+
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    return StreamingResponse(
+        as_csv() if fmt == "csv" else as_json(),
+        media_type="text/csv; charset=utf-8" if fmt == "csv" else "application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}-{stamp}.{fmt}"'},
+    )
+
+
+EXPORT_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {"content": {"text/csv": {}, "application/json": {}}}
+}
+
+ALERT_EXPORT_COLUMNS = (
+    "id",
+    "session_id",
+    "created_at",
+    "last_seen",
+    "severity",
+    "type",
+    "title",
+    "source",
+    "confidence",
+    "src",
+    "dst",
+    "ports",
+    "protocol",
+    "mitre_technique",
+    "occurrences",
+    "status",
+    "note",
+    "family",
+    "model_version",
+    "explanation",
+    "recommendation",
+)
+
+
+def _alert_row(row: AlertRow, flat: bool) -> dict[str, Any]:
+    data = {c: getattr(row, c) for c in ALERT_EXPORT_COLUMNS}
+    if flat:  # CSV: readable times and one cell per list
+        data["created_at"], data["last_seen"] = _iso(row.created_at), _iso(row.last_seen)
+        data["ports"] = " ".join(str(p) for p in row.ports or [])
+        data["confidence"] = round(row.confidence, 4)
+    return data
+
+
+@router.get("/alerts/export", response_class=StreamingResponse, responses=EXPORT_RESPONSES)
+def export_alerts(
+    format: Literal["csv", "json"] = "csv",
+    severity: list[Severity] = Query(default=[]),
+    status: list[Status] = Query(default=[]),
+    type: list[str] = Query(default=[]),
+    src: str | None = None,
+    dst: str | None = None,
+    since: float | None = None,
+    until: float | None = None,
+    session_id: str | None = None,
+    _: Principal = Depends(require_user),
+    db: Database = Depends(get_db),
+) -> StreamingResponse:
+    """Every alert matching the filters (up to 100,000), as CSV or JSON. CSV cells that a
+    spreadsheet would run as a formula are prefixed with an apostrophe."""
+    query = repo.AlertQuery(
+        severity=tuple(severity),
+        status=tuple(status),
+        type=tuple(type),
+        src=src,
+        dst=dst,
+        since=since,
+        until=until,
+        session_id=session_id,
+    )
+    return _export(
+        db,
+        repo.filtered_alerts(query),
+        (AlertRow.last_seen.desc(), AlertRow.id),
+        format,
+        ALERT_EXPORT_COLUMNS,
+        lambda r: _alert_row(r, flat=format == "csv"),
+        "alerts",
+    )
+
+
 @router.get("/alerts/{alert_id}")
 def get_alert(
     alert_id: str, _: Principal = Depends(require_user), db: Database = Depends(get_db)
@@ -150,19 +297,14 @@ class FlowOut(BaseModel):
     stats: dict[str, Any]
 
 
-@router.get("/flows")
-def list_flows(
-    session_id: str | None = None,
-    ip: str | None = Query(default=None, description="Either endpoint"),
-    port: int | None = Query(default=None, ge=0, le=65535),
-    protocol: int | None = Query(default=None, ge=0, le=255),
-    flow_id: list[str] = Query(default=[]),
-    since: float | None = None,
-    limit: int = Query(default=100, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
-    _: Principal = Depends(require_user),
-    db: Database = Depends(get_db),
-) -> Page[FlowOut]:
+def flow_statement(
+    session_id: str | None,
+    ip: str | None,
+    port: int | None,
+    protocol: int | None,
+    flow_id: list[str],
+    since: float | None,
+) -> Select[tuple[Flow]]:
     stmt = select(Flow)
     if session_id:
         stmt = stmt.where(Flow.session_id == session_id)
@@ -176,12 +318,80 @@ def list_flows(
         stmt = stmt.where(Flow.flow_id.in_(flow_id))
     if since is not None:
         stmt = stmt.where(Flow.last_seen >= since)
+    return stmt
+
+
+@router.get("/flows")
+def list_flows(
+    session_id: str | None = None,
+    ip: str | None = Query(default=None, description="Either endpoint"),
+    port: int | None = Query(default=None, ge=0, le=65535),
+    protocol: int | None = Query(default=None, ge=0, le=255),
+    flow_id: list[str] = Query(default=[]),
+    since: float | None = None,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    _: Principal = Depends(require_user),
+    db: Database = Depends(get_db),
+) -> Page[FlowOut]:
+    stmt = flow_statement(session_id, ip, port, protocol, flow_id, since)
     with db.session() as s:
         total = s.scalar(select(func.count()).select_from(stmt.subquery())) or 0
         rows = s.scalars(stmt.order_by(desc(Flow.last_seen)).limit(limit).offset(offset)).all()
         return Page(
             items=[FlowOut.model_validate(r) for r in rows], total=total, limit=limit, offset=offset
         )
+
+
+FLOW_EXPORT_COLUMNS = (
+    "session_id",
+    "flow_id",
+    "first_seen",
+    "last_seen",
+    "src_ip",
+    "src_port",
+    "dst_ip",
+    "dst_port",
+    "protocol",
+    "packets",
+    "payload_bytes",
+    "ip_bytes",
+    "end_reason",
+    "app_protocol",
+)
+
+
+def _flow_row(row: Flow, flat: bool) -> dict[str, Any]:
+    data = {c: getattr(row, c) for c in FLOW_EXPORT_COLUMNS}
+    if flat:
+        data["first_seen"], data["last_seen"] = _iso(row.first_seen), _iso(row.last_seen)
+    else:
+        data["stats"] = row.stats  # every measured feature, as stored
+    return data
+
+
+@router.get("/flows/export", response_class=StreamingResponse, responses=EXPORT_RESPONSES)
+def export_flows(
+    format: Literal["csv", "json"] = "csv",
+    session_id: str | None = None,
+    ip: str | None = Query(default=None, description="Either endpoint"),
+    port: int | None = Query(default=None, ge=0, le=65535),
+    protocol: int | None = Query(default=None, ge=0, le=255),
+    since: float | None = None,
+    _: Principal = Depends(require_user),
+    db: Database = Depends(get_db),
+) -> StreamingResponse:
+    """Every flow matching the filters (up to 100,000), as CSV (summary columns) or JSON (with
+    every measured feature)."""
+    return _export(
+        db,
+        flow_statement(session_id, ip, port, protocol, [], since),
+        (Flow.last_seen.desc(), Flow.id),
+        format,
+        FLOW_EXPORT_COLUMNS,
+        lambda r: _flow_row(r, flat=format == "csv"),
+        "flows",
+    )
 
 
 class SessionOut(BaseModel):

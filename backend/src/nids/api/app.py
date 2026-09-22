@@ -14,9 +14,10 @@ from sqlalchemy import func, select, text
 
 from nids import __version__
 from nids.api import auth, errors, models, web, ws
-from nids.api.routes import admin, data, sensor
+from nids.api.routes import admin, data, notifications, reports, sensor
 from nids.api.supervisor import Supervisor
 from nids.core.settings import Settings, get_settings
+from nids.notify.dispatcher import Notifier
 from nids.store.db import Database
 from nids.store.models import AlertRow, Job
 
@@ -58,6 +59,17 @@ async def _daily_retention(app: FastAPI) -> None:
         await asyncio.sleep(24 * 3600)
 
 
+async def _notifications(app: FastAPI) -> None:
+    """Send email/webhook notifications for new and escalated alerts (see nids.notify)."""
+    notifier: Notifier = app.state.notifier
+    while True:
+        await asyncio.sleep(3)
+        try:
+            await asyncio.to_thread(notifier.run_once)
+        except Exception:
+            log.exception("Notification pass failed")
+
+
 def create_app(settings: Settings | None = None, background: bool = True) -> FastAPI:
     settings = settings or get_settings()
     data_dir = Path(settings.data_dir)
@@ -71,6 +83,7 @@ def create_app(settings: Settings | None = None, background: bool = True) -> Fas
             tasks = [
                 asyncio.create_task(app.state.broadcaster.run()),
                 asyncio.create_task(_daily_retention(app)),
+                asyncio.create_task(_notifications(app)),
             ]
         try:
             yield
@@ -91,6 +104,7 @@ def create_app(settings: Settings | None = None, background: bool = True) -> Fas
     app.state.db = Database(settings.database_url)
     app.state.supervisor = Supervisor(app.state.db, settings)
     app.state.broadcaster = ws.Broadcaster(app)
+    app.state.notifier = Notifier(app.state.db)
     errors.install(app)
 
     @app.get("/healthz", tags=["system"])
@@ -134,7 +148,17 @@ def create_app(settings: Settings | None = None, background: bool = True) -> Fas
         ]
         return "\n".join(lines) + "\n"
 
-    for router in (auth.router, sensor.router, data.router, admin.router, models.router, ws.router):
+    routers = (
+        auth.router,
+        sensor.router,
+        data.router,
+        admin.router,
+        reports.router,
+        notifications.router,
+        models.router,
+        ws.router,
+    )
+    for router in routers:
         app.include_router(router)
     web.install(app, Path(settings.frontend_dir), settings.secure_cookies)
     return app

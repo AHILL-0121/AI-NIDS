@@ -5,9 +5,11 @@
  * from the same source of truth without polling (audit UI-01). Reconnects with backoff.
  */
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 import type { Schemas } from "@/lib/api/client";
+import { loadPrefs, shouldNotify, showAlert } from "@/lib/desktop";
 
 export type ConnectionState = "connecting" | "live" | "offline";
 
@@ -51,7 +53,9 @@ export function applyEvent(queryClient: QueryClient, event: LiveEvent): void {
       break;
     case "job.progress":
       void queryClient.invalidateQueries({ queryKey: ["jobs"] });
-      if (event.data.status === "done")
+      if (event.data.kind === "report")
+        void queryClient.invalidateQueries({ queryKey: ["reports"] });
+      if (event.data.status === "done" && event.data.kind === "train")
         void queryClient.invalidateQueries({ queryKey: ["models"] });
       break;
     default:
@@ -75,6 +79,7 @@ const LiveContext = createContext<ConnectionState>("connecting");
 
 export function LiveProvider({ children, enabled }: { children: ReactNode; enabled: boolean }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [state, setState] = useState<ConnectionState>("connecting");
 
   useEffect(() => {
@@ -83,6 +88,8 @@ export function LiveProvider({ children, enabled }: { children: ReactNode; enabl
     let retry = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
+
+    const openAlert = (id: string) => router.push(`/alerts/?id=${encodeURIComponent(id)}`);
 
     const connect = () => {
       setState("connecting");
@@ -93,7 +100,15 @@ export function LiveProvider({ children, enabled }: { children: ReactNode; enabl
       };
       socket.onmessage = (message) => {
         try {
-          applyEvent(queryClient, JSON.parse(String(message.data)) as LiveEvent);
+          const event = JSON.parse(String(message.data)) as LiveEvent;
+          if (event.type === "alert.new" || event.type === "alert.updated") {
+            const previous = queryClient.getQueryData<AlertOut>(["alert", event.data.id]);
+            // An update to an alert raised before this page loaded: its old severity is unknown.
+            const known = event.type === "alert.new" || previous !== undefined;
+            if (known && shouldNotify(previous, event.data, loadPrefs()))
+              showAlert(event.data, openAlert);
+          }
+          applyEvent(queryClient, event);
         } catch {
           // ignore malformed messages
         }
@@ -111,7 +126,7 @@ export function LiveProvider({ children, enabled }: { children: ReactNode; enabl
       clearTimeout(timer);
       socket?.close();
     };
-  }, [enabled, queryClient]);
+  }, [enabled, queryClient, router]);
 
   return <LiveContext value={enabled ? state : "offline"}>{children}</LiveContext>;
 }

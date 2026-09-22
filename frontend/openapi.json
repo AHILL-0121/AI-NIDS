@@ -549,6 +549,183 @@
         }
       }
     },
+    "/api/alerts/export": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Export Alerts",
+        "description": "Every alert matching the filters (up to 100,000), as CSV or JSON. CSV cells that a\nspreadsheet would run as a formula are prefixed with an apostrophe.",
+        "operationId": "export_alerts_api_alerts_export_get",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "csv",
+                "json"
+              ],
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Severity"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "new",
+                  "acknowledged",
+                  "resolved",
+                  "false_positive"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "title": "Type"
+            }
+          },
+          {
+            "name": "src",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Src"
+            }
+          },
+          {
+            "name": "dst",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dst"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/csv": {},
+              "application/json": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/alerts/{alert_id}": {
       "get": {
         "tags": [
@@ -782,6 +959,137 @@
                   "$ref": "#/components/schemas/Page_FlowOut_"
                 }
               }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/flows/export": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Export Flows",
+        "description": "Every flow matching the filters (up to 100,000), as CSV (summary columns) or JSON (with\nevery measured feature).",
+        "operationId": "export_flows_api_flows_export_get",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "csv",
+                "json"
+              ],
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "ip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Either endpoint",
+              "title": "Ip"
+            },
+            "description": "Either endpoint"
+          },
+          {
+            "name": "port",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 65535,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Port"
+            }
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 255,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Protocol"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/csv": {},
+              "application/json": {}
             }
           },
           "422": {
@@ -1249,6 +1557,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/PrepareJob"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ReportJob"
                   }
                 ],
                 "title": "Body"
@@ -1504,6 +1815,276 @@
                     "$ref": "#/components/schemas/AuditEntry"
                   },
                   "title": "Response Audit Log Api Audit Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "List Reports",
+        "description": "Reports, newest first (including ones still being generated).",
+        "operationId": "list_reports_api_reports_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{16}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportOut"
+                  },
+                  "title": "Response List Reports Api Reports Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{report_id}/{fmt}": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Download Report",
+        "operationId": "download_report_api_reports__report_id___fmt__get",
+        "parameters": [
+          {
+            "name": "fmt",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "html",
+                "pdf"
+              ],
+              "type": "string",
+              "title": "Fmt"
+            }
+          },
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Save instead of opening in the browser",
+              "default": false,
+              "title": "Download"
+            },
+            "description": "Save instead of opening in the browser"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{report_id}": {
+      "delete": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Delete Report",
+        "operationId": "delete_report_api_reports__report_id__delete",
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Get Notifications",
+        "description": "Current settings (the SMTP password and webhook secret are never returned) and the\nresult of the last delivery per channel.",
+        "operationId": "get_notifications_api_notifications_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Update Notifications",
+        "description": "Change some settings. Leave out `smtp_password` / `webhook_secret` to keep them; send \"\"\nto clear one.",
+        "operationId": "update_notifications_api_notifications_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Changes"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/test": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Send Test",
+        "description": "Send a test message on one channel with the saved settings, even if it's turned off.",
+        "operationId": "send_test_api_notifications_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestResult"
                 }
               }
             }
@@ -2103,6 +2684,45 @@
         ],
         "title": "CapabilityReport"
       },
+      "ChannelStatus": {
+        "properties": {
+          "last_ok_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Ok At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          }
+        },
+        "type": "object",
+        "title": "ChannelStatus"
+      },
       "Check": {
         "properties": {
           "name": {
@@ -2504,6 +3124,180 @@
         ],
         "title": "ModelOut"
       },
+      "NotificationSettings": {
+        "properties": {
+          "email_enabled": {
+            "type": "boolean",
+            "title": "Email Enabled",
+            "default": false
+          },
+          "email_min_severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Email Min Severity",
+            "default": "high"
+          },
+          "smtp_host": {
+            "type": "string",
+            "maxLength": 253,
+            "title": "Smtp Host",
+            "default": ""
+          },
+          "smtp_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Smtp Port",
+            "default": 587
+          },
+          "smtp_security": {
+            "type": "string",
+            "enum": [
+              "starttls",
+              "tls",
+              "none"
+            ],
+            "title": "Smtp Security",
+            "default": "starttls"
+          },
+          "smtp_username": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Smtp Username",
+            "default": ""
+          },
+          "smtp_password": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Smtp Password",
+            "default": ""
+          },
+          "email_from": {
+            "type": "string",
+            "maxLength": 254,
+            "title": "Email From",
+            "default": ""
+          },
+          "email_to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Email To",
+            "default": []
+          },
+          "webhook_enabled": {
+            "type": "boolean",
+            "title": "Webhook Enabled",
+            "default": false
+          },
+          "webhook_min_severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Webhook Min Severity",
+            "default": "high"
+          },
+          "webhook_url": {
+            "type": "string",
+            "maxLength": 2048,
+            "title": "Webhook Url",
+            "default": ""
+          },
+          "webhook_format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "slack",
+              "discord"
+            ],
+            "title": "Webhook Format",
+            "default": "json"
+          },
+          "webhook_secret": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Webhook Secret",
+            "default": ""
+          },
+          "include_replays": {
+            "type": "boolean",
+            "title": "Include Replays",
+            "default": false
+          },
+          "max_per_hour": {
+            "type": "integer",
+            "maximum": 600.0,
+            "minimum": 1.0,
+            "title": "Max Per Hour",
+            "default": 12
+          },
+          "digest_enabled": {
+            "type": "boolean",
+            "title": "Digest Enabled",
+            "default": false
+          },
+          "digest_hour": {
+            "type": "integer",
+            "maximum": 23.0,
+            "minimum": 0.0,
+            "title": "Digest Hour",
+            "default": 8
+          },
+          "link_base_url": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Link Base Url",
+            "default": "http://127.0.0.1:8000"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NotificationSettings"
+      },
+      "NotificationSettingsOut": {
+        "properties": {
+          "values": {
+            "$ref": "#/components/schemas/NotificationSettings"
+          },
+          "smtp_password_set": {
+            "type": "boolean",
+            "title": "Smtp Password Set"
+          },
+          "webhook_secret_set": {
+            "type": "boolean",
+            "title": "Webhook Secret Set"
+          },
+          "status": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ChannelStatus"
+            },
+            "type": "object",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values",
+          "smtp_password_set",
+          "webhook_secret_set",
+          "status"
+        ],
+        "title": "NotificationSettingsOut",
+        "description": "What the API returns: the settings with secrets blanked, plus delivery status."
+      },
       "Page_AlertOut_": {
         "properties": {
           "items": {
@@ -2668,6 +3462,106 @@
           "upload_id"
         ],
         "title": "ReplayJob"
+      },
+      "ReportJob": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "report",
+            "title": "Kind"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$",
+            "title": "Session Id"
+          },
+          "pdf": {
+            "type": "boolean",
+            "title": "Pdf",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "session_id"
+        ],
+        "title": "ReportJob"
+      },
+      "ReportOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "html": {
+            "type": "boolean",
+            "title": "Html"
+          },
+          "pdf": {
+            "type": "boolean",
+            "title": "Pdf"
+          },
+          "pdf_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "status",
+          "created_at",
+          "finished_at",
+          "html",
+          "pdf",
+          "pdf_error",
+          "error"
+        ],
+        "title": "ReportOut"
       },
       "RuleIn": {
         "properties": {
@@ -3273,6 +4167,42 @@
           "protocols_last_15m"
         ],
         "title": "Summary"
+      },
+      "TestRequest": {
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "email",
+              "webhook"
+            ],
+            "title": "Channel"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel"
+        ],
+        "title": "TestRequest"
+      },
+      "TestResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "message"
+        ],
+        "title": "TestResult"
       },
       "TrainJob": {
         "properties": {

@@ -101,6 +101,9 @@ class AlertRow(Base):
     model_version: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[str] = mapped_column(String(16), default="new")
     note: Mapped[str] = mapped_column(Text, default="")
+    # Highest severity the notifier has already handled (None = not looked at yet), so an alert
+    # that escalates past a channel's threshold is announced once, and restarts don't repeat.
+    notified_severity: Mapped[str | None] = mapped_column(String(16))
 
 
 class Traffic(Base):

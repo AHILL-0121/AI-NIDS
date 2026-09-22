@@ -126,3 +126,13 @@ export function TextLink({ className, ...props }: ComponentProps<typeof NextLink
     />
   );
 }
+
+/** A plain link styled as a button, for API files (downloads, reports) rather than app routes. */
+export function FileLink({
+  variant = "secondary",
+  size = "dense",
+  className,
+  ...props
+}: ComponentProps<"a"> & { variant?: Variant; size?: Size }) {
+  return <a {...props} className={buttonClass(variant, size, cx("no-underline", className))} />;
+}

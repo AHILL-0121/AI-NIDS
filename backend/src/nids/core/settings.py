@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     upload_max_mb: int = Field(default=512, gt=0, le=10_240)
     max_concurrent_jobs: int = Field(default=2, ge=1, le=8)
 
+    # Reports (Phase 8): PDFs are printed by a headless Chromium-based browser (Edge, Chrome,
+    # Chromium). Found automatically when unset; without one, reports are HTML only.
+    pdf_browser: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

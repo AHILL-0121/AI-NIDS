@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import { ProhibitIcon, TrashIcon } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
 import { Form } from "react-aria-components";
 
+import { NotificationsPanel } from "@/app/(app)/settings/Notifications";
 import { RelativeTime } from "@/components/AlertBits";
 import { Tag } from "@/components/Badges";
 import { Button, IconButton, TextLink } from "@/components/Button";
@@ -36,6 +37,7 @@ export default function SettingsPage() {
         )}
       </QueryView>
       <Suppressions />
+      <NotificationsPanel />
       <div className="grid gap-4 lg:grid-cols-2">
         <PasswordForm />
         <Panel title="Appearance" bodyClassName="p-4 flex flex-col gap-2">

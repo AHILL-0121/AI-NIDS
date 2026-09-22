@@ -25,11 +25,6 @@ from ..store.test_store import run_pipeline
 PASSWORD = "correct horse battery staple"
 
 
-@pytest.fixture(autouse=True)
-def reset_rate_limit() -> None:
-    auth.login_limiter._events.clear()
-
-
 def make_client(**overrides: object) -> TestClient:
     settings = get_settings().model_copy(update=overrides) if overrides else get_settings()
     return TestClient(create_app(settings, background=False))

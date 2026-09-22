@@ -11,6 +11,8 @@ export type Session = Schemas["SessionOut"];
 export type Job = Schemas["JobOut"];
 export type ModelInfo = Schemas["ModelOut"];
 export type RuntimeSettings = Schemas["RuntimeSettings"];
+export type Report = Schemas["ReportOut"];
+export type NotificationSettings = Schemas["NotificationSettings"];
 export type Severity = Alert["severity"];
 export type AlertStatus = Alert["status"];
 
@@ -238,8 +240,10 @@ export function useJobs() {
 export function useStartJob() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Schemas["ReplayJob"] | Schemas["TrainJob"] | Schemas["PrepareJob"]) =>
-      unwrap(client.POST("/api/jobs", { body })),
+    mutationFn: (
+      body:
+        Schemas["ReplayJob"] | Schemas["TrainJob"] | Schemas["PrepareJob"] | Schemas["ReportJob"],
+    ) => unwrap(client.POST("/api/jobs", { body })),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["jobs"] }),
   });
 }
@@ -294,5 +298,84 @@ export function useChangePassword() {
   return useMutation({
     mutationFn: (body: Schemas["PasswordChange"]) =>
       unwrap(client.POST("/api/auth/password", { body })),
+  });
+}
+
+/**
+ * URL of a server-side export of every row matching `filters` (not just the loaded page). A plain
+ * same-origin GET, so a link with `download` works: the session cookie goes with it.
+ */
+export function exportUrl(
+  kind: "alerts" | "flows",
+  format: "csv" | "json",
+  filters: object,
+): string {
+  const params = new URLSearchParams({ format });
+  for (const [key, value] of Object.entries(filters)) {
+    if (key === "limit" || key === "offset" || value === undefined || value === null) continue;
+    if (Array.isArray(value)) value.forEach((v) => params.append(key, String(v)));
+    else if (value !== "") params.append(key, String(value));
+  }
+  return `/api/${kind}/export?${params.toString()}`;
+}
+
+export function reportUrl(id: string, format: "html" | "pdf", download = false): string {
+  return `/api/reports/${id}/${format}${download ? "?download=true" : ""}`;
+}
+
+export function useReports(sessionId?: string) {
+  return useQuery({
+    queryKey: ["reports", sessionId ?? null],
+    queryFn: () =>
+      unwrap(client.GET("/api/reports", { params: { query: { session_id: sessionId } } })),
+  });
+}
+
+export function useCreateReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      unwrap(
+        client.POST("/api/jobs", { body: { kind: "report", session_id: sessionId, pdf: true } }),
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    },
+  });
+}
+
+export function useDeleteReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(client.DELETE("/api/reports/{report_id}", { params: { path: { report_id: id } } })),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["reports"] }),
+  });
+}
+
+export function useNotifications() {
+  return useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => unwrap(client.GET("/api/notifications")),
+  });
+}
+
+export function useUpdateNotifications() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (changes: Partial<NotificationSettings>) =>
+      unwrap(client.PATCH("/api/notifications", { body: changes as Record<string, unknown> })),
+    onSuccess: (data) => queryClient.setQueryData(["notifications"], data),
+  });
+}
+
+export function useTestNotification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (channel: "email" | "webhook") =>
+      unwrap(client.POST("/api/notifications/test", { body: { channel } })),
+    // Success or failure, the channel's last-delivery status changed.
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 }

@@ -221,6 +221,13 @@ class PrepareJob(BaseModel):
     dataset: Literal["cicids2017", "unsw-nb15"]
 
 
+class ReportJob(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["report"]
+    session_id: str = Field(pattern=r"^[0-9a-f]{16}$")
+    pdf: bool = True  # also print a PDF (needs Edge, Chrome or Chromium on the server)
+
+
 class JobOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -238,7 +245,7 @@ class JobOut(BaseModel):
 
 @router.post("/jobs", status_code=202)
 def start_job(
-    body: ReplayJob | TrainJob | PrepareJob,
+    body: ReplayJob | TrainJob | PrepareJob | ReportJob,
     request: Request,
     principal: Principal = Depends(require_user),
     db: Database = Depends(get_db),

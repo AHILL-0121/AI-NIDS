@@ -1,19 +1,19 @@
 "use client";
 
-import { ShuffleIcon } from "@phosphor-icons/react";
+import { DownloadSimpleIcon, ShuffleIcon } from "@phosphor-icons/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 
 import { RelativeTime } from "@/components/AlertBits";
 import { ProtocolTag, Tag } from "@/components/Badges";
-import { Button, TextLink } from "@/components/Button";
+import { Button, FileLink, TextLink } from "@/components/Button";
 import { DataTable, Pager, columnHelper } from "@/components/DataTable";
 import { SearchField, Select } from "@/components/Field";
 import { Drawer } from "@/components/Overlays";
 import { Facts, PageHeader, Panel } from "@/components/Panel";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/States";
 import { absoluteTime, bytes, duration, endpoint, humanize, protocolName } from "@/lib/format";
-import { useFlows, type Flow } from "@/lib/queries";
+import { exportUrl, useFlows, type Flow } from "@/lib/queries";
 
 const PAGE = 200;
 const col = columnHelper<Flow>();
@@ -118,6 +118,16 @@ function FlowsView() {
           ) : (
             "Bidirectional connections seen by the sensor. Flows are sampled for storage; every flow tied to an alert is kept."
           )
+        }
+        actions={
+          <div className="flex gap-2" role="group" aria-label="Export matching flows">
+            <FileLink href={exportUrl("flows", "csv", filters)} download>
+              <DownloadSimpleIcon size={14} aria-hidden /> CSV
+            </FileLink>
+            <FileLink href={exportUrl("flows", "json", filters)} download>
+              <DownloadSimpleIcon size={14} aria-hidden /> JSON
+            </FileLink>
+          </div>
         }
       />
       <Panel bodyClassName="flex flex-col">

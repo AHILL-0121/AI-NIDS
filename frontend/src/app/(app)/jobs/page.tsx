@@ -58,6 +58,7 @@ function jobLabel(job: Job, uploads?: Upload[]): string {
     return `Train ${String(p.dataset ?? "")} · ${String(p.protocol ?? "")} · ${String(p.features ?? "")}`;
   if (job.kind === "prepare") return `Prepare ${String(p.dataset ?? "")}`;
   if (job.kind === "sensor") return `Live capture ${String(p.interface ?? "")}`;
+  if (job.kind === "report") return `Report for session ${String(p.session_id ?? "")}`;
   return humanize(job.kind);
 }
 

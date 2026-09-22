@@ -332,7 +332,7 @@ class AlertQuery:
     offset: int = 0
 
 
-def _filtered(query: AlertQuery) -> Select[tuple[AlertRow]]:
+def filtered_alerts(query: AlertQuery) -> Select[tuple[AlertRow]]:
     stmt = select(AlertRow)
     if query.severity:
         stmt = stmt.where(AlertRow.severity.in_(query.severity))
@@ -354,7 +354,7 @@ def _filtered(query: AlertQuery) -> Select[tuple[AlertRow]]:
 
 
 def list_alerts(db: Database, query: AlertQuery) -> tuple[list[AlertRow], int]:
-    stmt = _filtered(query)
+    stmt = filtered_alerts(query)
     with db.session() as s:
         total = s.scalar(select(func.count()).select_from(stmt.subquery())) or 0
         rows = s.scalars(

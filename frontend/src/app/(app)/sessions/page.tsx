@@ -1,17 +1,33 @@
-﻿"use client";
+"use client";
 
-import { ClockCounterClockwiseIcon } from "@phosphor-icons/react";
+import {
+  ClockCounterClockwiseIcon,
+  FilePdfIcon,
+  FileTextIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { useState } from "react";
 
+import { RelativeTime } from "@/components/AlertBits";
 import { Dot, Tag } from "@/components/Badges";
-import { LinkButton } from "@/components/Button";
+import { Button, FileLink, IconButton, LinkButton } from "@/components/Button";
 import { DataTable, columnHelper } from "@/components/DataTable";
 import { Drawer } from "@/components/Overlays";
 import { Facts, PageHeader, Panel } from "@/components/Panel";
-import { EmptyState, QueryView } from "@/components/States";
+import { EmptyState, FormError, QueryView } from "@/components/States";
+import { useToast } from "@/components/Toast";
 import { TrafficChart } from "@/charts/charts";
 import { absoluteTime, count, duration, humanize } from "@/lib/format";
-import { useSessions, useTimeseries, type Session } from "@/lib/queries";
+import {
+  reportUrl,
+  useCreateReport,
+  useDeleteReport,
+  useReports,
+  useSessions,
+  useTimeseries,
+  type Report,
+  type Session,
+} from "@/lib/queries";
 
 const col = columnHelper<Session>();
 
@@ -178,6 +194,7 @@ function SessionBody({ session }: { session: Session }) {
           {(buckets) => <TrafficChart buckets={buckets} resolution={60} height={200} />}
         </QueryView>
       </section>
+      <SessionReports session={session} />
       {metrics.length > 0 && (
         <section className="flex flex-col gap-2">
           <h3 className="text-label font-medium text-ink-subtle uppercase">Counters</h3>
@@ -194,5 +211,100 @@ function SessionBody({ session }: { session: Session }) {
         </section>
       )}
     </div>
+  );
+}
+
+function reportTone(report: Report): "ok" | "warn" | "bad" | "off" {
+  if (report.status === "running") return "warn";
+  if (report.status === "done") return "ok";
+  return report.status === "failed" ? "bad" : "off";
+}
+
+function SessionReports({ session }: { session: Session }) {
+  const reports = useReports(session.id);
+  const create = useCreateReport();
+  const remove = useDeleteReport();
+  const notify = useToast();
+  const running = reports.data?.some((r) => r.status === "running") ?? false;
+  return (
+    <section className="flex flex-col gap-2" aria-labelledby="session-reports">
+      <div className="flex items-center justify-between gap-2">
+        <h3 id="session-reports" className="text-label font-medium text-ink-subtle uppercase">
+          Reports
+        </h3>
+        <Button
+          size="dense"
+          loading={create.isPending || running}
+          isDisabled={session.status === "running"}
+          onPress={() =>
+            create.mutate(session.id, {
+              onSuccess: () => notify("Generating the report…", { tone: "ok" }),
+            })
+          }
+        >
+          Generate report
+        </Button>
+      </div>
+      {session.status === "running" && (
+        <p className="text-meta text-ink-subtle">
+          Stop the capture to report on the whole session.
+        </p>
+      )}
+      <FormError error={create.error ?? remove.error} />
+      <QueryView
+        query={reports}
+        empty={(list) =>
+          list.length === 0 ? (
+            <p className="text-meta text-ink-subtle">
+              No reports yet. A report summarises the session with its alerts, what to do about them
+              and a glossary, as a web page and a PDF.
+            </p>
+          ) : null
+        }
+      >
+        {(list) => (
+          <ul className="divide-y divide-line rounded-[var(--radius-panel)] border border-line">
+            {list.map((report) => (
+              <li key={report.id} className="flex flex-col gap-1.5 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-dense">
+                    <Dot tone={reportTone(report)} pulse={report.status === "running"} />
+                    {report.status === "running" ? "Generating…" : humanize(report.status)}
+                    <span className="text-ink-subtle">
+                      · <RelativeTime epoch={report.created_at} />
+                    </span>
+                  </span>
+                  {report.html && (
+                    <FileLink
+                      href={reportUrl(report.id, "html")}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <FileTextIcon size={14} aria-hidden /> View
+                    </FileLink>
+                  )}
+                  {report.pdf && (
+                    <FileLink href={reportUrl(report.id, "pdf", true)} download>
+                      <FilePdfIcon size={14} aria-hidden /> PDF
+                    </FileLink>
+                  )}
+                  {report.status !== "running" && (
+                    <IconButton
+                      label="Delete report"
+                      icon={<TrashIcon size={14} aria-hidden />}
+                      onPress={() => remove.mutate(report.id)}
+                    />
+                  )}
+                </div>
+                {report.error && <p className="text-meta text-sev-critical">{report.error}</p>}
+                {report.status === "done" && !report.pdf && report.pdf_error && (
+                  <p className="text-meta text-ink-subtle">No PDF: {report.pdf_error}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </QueryView>
+    </section>
   );
 }

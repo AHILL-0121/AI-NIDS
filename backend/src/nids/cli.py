@@ -497,5 +497,33 @@ def evaluate(
     typer.echo(json.dumps(summary, indent=2, default=str))
 
 
+@app.command()
+def report(
+    session_id: Annotated[str, typer.Argument(help="Capture session id (see the Sessions page).")],
+    out: Annotated[Path, typer.Option("--out", "-o", help="Output path without extension.")] = Path(
+        "report"
+    ),
+    pdf: Annotated[bool, typer.Option("--pdf/--no-pdf", help="Also print a PDF.")] = True,
+) -> None:
+    """Write a session report as HTML, and as PDF when Edge/Chrome/Chromium is available."""
+    from nids.reports.session import ReportError, result_line, write_report
+    from nids.store.db import Database
+
+    settings = get_settings()
+    try:
+        result = write_report(
+            Database(settings.database_url), session_id, out, pdf=pdf, browser=settings.pdf_browser
+        )
+    except ReportError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"Saved report to {out.with_suffix('.html')}", err=True)
+    if result["pdf"]:
+        typer.echo(f"Saved PDF to {out.with_suffix('.pdf')}", err=True)
+    elif pdf:
+        typer.echo(f"PDF skipped: {result['pdf_error']}", err=True)
+    typer.echo(result_line(result))
+
+
 if __name__ == "__main__":
     app()
