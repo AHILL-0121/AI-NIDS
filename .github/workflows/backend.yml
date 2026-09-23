@@ -25,9 +25,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v6
         with:
           version: "0.9.30"
           python-version: "3.12"
@@ -64,7 +64,7 @@ jobs:
           uv run coverage report --include="src/nids/core/*" --fail-under=85
           uv run coverage report --include="src/nids/sensor/*" --fail-under=85
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: backend-coverage
