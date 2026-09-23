@@ -64,7 +64,7 @@ jobs:
           uv run coverage report --include="src/nids/core/*" --fail-under=85
           uv run coverage report --include="src/nids/sensor/*" --fail-under=85
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-coverage

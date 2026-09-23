@@ -85,7 +85,7 @@ jobs:
         env:
           CI: "true"
           NIDS_PDF_NO_SANDBOX: "true"  # same trade as the Docker image: our own script-free page
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
