@@ -97,4 +97,4 @@ endpoints.
 - Notification secrets are stored unencrypted.
 - There is no second factor and no password-reset command. Recovering a lost password means deleting the admin row from the database's `users` table and running setup again.
 - The capture parsers (Scapy, and nDPI inside NFStream) are third-party code facing hostile input.
-  Keep them updated. Dependabot opens weekly update PRs.
+  Keep them updated.
